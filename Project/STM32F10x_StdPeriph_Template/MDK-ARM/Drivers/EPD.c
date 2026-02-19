@@ -279,7 +279,7 @@ void EPD_Init(void)
   * 函    数：将EPD显存数组更新到EPD屏幕
   * 参    数：无
   * 返 回 值：无
-  * 注：对于墨水屏，0x00表示白色，0xFF表示黑色
+  * 注：对于墨水屏，0x00表示黑色，0xFF表示白色
   */
 void EPD_Update(void)
 {
@@ -291,7 +291,7 @@ void EPD_Update(void)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            /* 显存中1表示黑色，0表示白色 */
+            /* 显存中0表示黑色，1表示白色 */
             EPD_WriteData(EPD_DisplayBuf[i][j]);
         }
     }
@@ -302,7 +302,7 @@ void EPD_Update(void)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            EPD_WriteData(0x00);  // 红色通道全0表示不显示红色
+            EPD_WriteData(0x00);
         }
     }
     
@@ -325,7 +325,8 @@ void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 }
 
 /**
-  * 函    数：将EPD显存数组全部清零（设置为白色）
+  * 函    数：将EPD显存数组全部清零（设置为黑色？还是白色？）
+  * 注：根据您的描述，应该是设置为白色（背景）
   * 参    数：无
   * 返 回 值：无
   */
@@ -336,11 +337,19 @@ void EPD_Clear(void)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            EPD_DisplayBuf[i][j] = 0x00;  // 0x00表示白色
+            EPD_DisplayBuf[i][j] = 0xFF;  // 0xFF表示全部为1（白色）
         }
     }
 }
 
+/**
+  * 函    数：将EPD显存数组部分清零（设置为白色）
+  * 参    数：X 指定区域左上角的横坐标
+  * 参    数：Y 指定区域左上角的纵坐标
+  * 参    数：Width 指定区域的宽度
+  * 参    数：Height 指定区域的高度
+  * 返 回 值：无
+  */
 void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
@@ -354,12 +363,17 @@ void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
             {
                 byteIndex = i / 8;
                 bitIndex = 7 - (i % 8);
-                EPD_DisplayBuf[j][byteIndex] &= ~(0x01 << bitIndex);
+                EPD_DisplayBuf[j][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
             }
         }
     }
 }
 
+/**
+  * 函    数：将EPD显存数组全部取反（黑白反转）
+  * 参    数：无
+  * 返 回 值：无
+  */
 void EPD_Reverse(void)
 {
     uint16_t i, j;
@@ -367,11 +381,19 @@ void EPD_Reverse(void)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            EPD_DisplayBuf[i][j] ^= 0xFF;
+            EPD_DisplayBuf[i][j] ^= 0xFF;  // 取反
         }
     }
 }
 
+/**
+  * 函    数：将EPD显存数组部分取反（黑白反转）
+  * 参    数：X 指定区域左上角的横坐标
+  * 参    数：Y 指定区域左上角的纵坐标
+  * 参    数：Width 指定区域的宽度
+  * 参    数：Height 指定区域的高度
+  * 返 回 值：无
+  */
 void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
@@ -385,14 +407,14 @@ void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
             {
                 byteIndex = i / 8;
                 bitIndex = 7 - (i % 8);
-                EPD_DisplayBuf[j][byteIndex] ^= (0x01 << bitIndex);
+                EPD_DisplayBuf[j][byteIndex] ^= (0x01 << bitIndex);  // 单个位取反
             }
         }
     }
 }
 
 /**
-  * 函    数：EPD显示一个字符
+  * 函    数：EPD显示一个字符（黑色前景，白色背景）
   * 参    数：X 指定字符左上角的横坐标
   * 参    数：Y 指定字符左上角的纵坐标
   * 参    数：Char 指定要显示的字符
@@ -405,7 +427,8 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
 {
     uint8_t i, j;
     uint8_t temp;
-    uint8_t pos, byteIndex, bitIndex;
+    uint8_t pos;
+    uint8_t byteIndex, bitIndex;
     
     if(FontSize == EPD_8X16)
     {
@@ -418,33 +441,52 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
             
             for(j = 0; j < 8; j++)  // 8列（宽度）
             {
-                if(temp & (0x80 >> j))  // 如果该位为1（表示要显示的点）
+                if(X + j >= 0 && X + j < EPD_WIDTH && Y + i >= 0 && Y + i < EPD_HEIGHT)
                 {
-                    /* 白色背景，黑色显示，所以1表示黑色 */
-                    EPD_DrawPoint(X + j, Y + i);
-                }
-                else
-                {
-                    /* 0表示白色背景，不需要清除，因为之前已经清过区域 */
-                    /* 如果需要背景色，可以在这里处理 */
+                    byteIndex = (X + j) / 8;
+                    bitIndex = 7 - ((X + j) % 8);
+                    
+                    if(temp & (0x80 >> j))  // 如果该位为1（表示要显示的点）
+                    {
+                        /* 设置为黑色（0） */
+                        EPD_DisplayBuf[Y + i][byteIndex] &= ~(0x01 << bitIndex);
+                    }
+                    else
+                    {
+                        /* 设置为白色（1） */
+                        EPD_DisplayBuf[Y + i][byteIndex] |= (0x01 << bitIndex);
+                    }
                 }
             }
         }
     }
     else if(FontSize == EPD_6X8)
     {
-        /* 6x8字体，每个字符6字节，每字节代表一列8个像素 */
+        /* 6x8字体，每个字符6字节，每字节代表一列8个像素？还是每字节代表一行？ */
+        /* 根据常见6x8字库格式，通常是每字节代表一列8个像素 */
         pos = Char - ' ';  // 计算字符在字库中的位置
         
-        for(i = 0; i < 8; i++)  // 8行（高度）
+        for(j = 0; j < 6; j++)  // 6列（宽度）
         {
-            for(j = 0; j < 6; j++)  // 6列（宽度）
+            temp = EPD_F6x8[pos][j];  // 获取一列数据
+            
+            for(i = 0; i < 8; i++)  // 8行（高度）
             {
-                temp = EPD_F6x8[pos][j];  // 获取一列数据
-                
-                if(temp & (1 << i))  // 注意：6x8字模是行存储还是列存储需要确认
+                if(X + j >= 0 && X + j < EPD_WIDTH && Y + i >= 0 && Y + i < EPD_HEIGHT)
                 {
-                    EPD_DrawPoint(X + j, Y + i);
+                    byteIndex = (X + j) / 8;
+                    bitIndex = 7 - ((X + j) % 8);
+                    
+                    if(temp & (1 << i))  // 检查该行是否有像素
+                    {
+                        /* 设置为黑色（0） */
+                        EPD_DisplayBuf[Y + i][byteIndex] &= ~(0x01 << bitIndex);
+                    }
+                    else
+                    {
+                        /* 设置为白色（1） */
+                        EPD_DisplayBuf[Y + i][byteIndex] |= (0x01 << bitIndex);
+                    }
                 }
             }
         }
@@ -557,6 +599,7 @@ void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, ui
   * 参    数：Height 指定图像的高度
   * 参    数：Image 指定要显示的图像
   * 返 回 值：无
+  * 注：图像数据中1表示黑色，0表示白色
   */
 void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const uint8_t *Image)
 {
@@ -577,7 +620,7 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
             {
                 byteIndex = (X + i) / 8;
                 bitIndex = 7 - ((X + i) % 8);
-                EPD_DisplayBuf[Y + j][byteIndex] &= ~(0x01 << bitIndex);  // 清为0（白色）
+                EPD_DisplayBuf[Y + j][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
             }
         }
     }
@@ -593,15 +636,14 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
                 bitIndex = 7 - ((X + i) % 8);
                 
                 /* 读取图像数据中的像素 */
-                /* 图像数据按字节存储，每个字节8个像素，高位对应左边像素 */
                 pixel = (Image[j * bytesPerLine + i / 8] >> (7 - (i % 8))) & 0x01;
                 
                 if(pixel)
                 {
-                    /* 1表示黑色，0表示白色 */
-                    EPD_DisplayBuf[Y + j][byteIndex] |= (0x01 << bitIndex);
+                    /* 1表示黑色，设置为0 */
+                    EPD_DisplayBuf[Y + j][byteIndex] &= ~(0x01 << bitIndex);
                 }
-                /* 如果是0（白色），已经是清空状态，不需要操作 */
+                /* 如果是0（白色），已经是白色状态，不需要操作 */
             }
         }
     }
@@ -618,11 +660,11 @@ void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...)
 }
 
 /**
-  * 函    数：EPD在指定位置画一个点
+  * 函    数：EPD在指定位置画一个点（黑色）
   * 参    数：X 指定点的横坐标
   * 参    数：Y 指定点的纵坐标
   * 返 回 值：无
-  * 注：0表示白色，1表示黑色
+  * 注：0表示黑色，1表示白色
   */
 void EPD_DrawPoint(int16_t X, int16_t Y)
 {
@@ -632,7 +674,7 @@ void EPD_DrawPoint(int16_t X, int16_t Y)
     {
         byteIndex = X / 8;
         bitIndex = 7 - (X % 8);
-        EPD_DisplayBuf[Y][byteIndex] |= (0x01 << bitIndex);  // 设置为1（黑色）
+        EPD_DisplayBuf[Y][byteIndex] &= ~(0x01 << bitIndex);  // 设置为0（黑色）
     }
 }
 
@@ -650,7 +692,7 @@ void EPD_ClearPoint(int16_t X, int16_t Y)
     {
         byteIndex = X / 8;
         bitIndex = 7 - (X % 8);
-        EPD_DisplayBuf[Y][byteIndex] &= ~(0x01 << bitIndex);  // 设置为0（白色）
+        EPD_DisplayBuf[Y][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
     }
 }
 

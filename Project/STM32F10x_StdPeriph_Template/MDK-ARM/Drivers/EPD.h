@@ -52,6 +52,7 @@ void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, ui
 void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const uint8_t *Image);
 void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...);
 void EPD_DrawPoint(int16_t X, int16_t Y);
+void EPD_ClearPoint(int16_t X, int16_t Y);
 uint8_t EPD_GetPoint(int16_t X, int16_t Y);
 void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1);
 void EPD_DrawDashedLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1);
