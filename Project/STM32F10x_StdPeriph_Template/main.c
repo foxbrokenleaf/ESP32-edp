@@ -133,34 +133,27 @@ int main(void)
      */
 
   /* Infinite loop */
-    /*初始化墨水屏*/
+    /* 初始化EPD */
     EPD_Init();
     
-    /*清屏*/
+    /* 清屏（全部白色） */
     EPD_Clear();
     
-    /*显示字符串 - 8x16字体*/
-    EPD_ShowString(8, 0, "H", EPD_8X16);
-    EPD_ShowString(8, 20, "S", EPD_8X16);
+    /* 绘制黑色实心圆 */
+    EPD_DrawCircle(76, 148, 30, EPD_FILLED);
     
-    /*显示字符串 - 6x8字体*/
-    EPD_ShowString(8, 40, "6", EPD_6X8);
+    /* 显示文字测试 */
+    EPD_ShowString(10, 50, "2.66inch", EPD_8X16);
+    EPD_ShowString(10, 70, "EPD Test", EPD_8X16);
+    EPD_ShowString(10, 90, "ABCDEFG", EPD_8X16);
+    EPD_ShowString(10, 110, "1234567", EPD_8X16);
     
-    /*显示数字*/
-    EPD_ShowNum(8, 60, 1, 1, EPD_8X16);
-    
-    /*画图测试*/
-    EPD_DrawLine(0, 80, 100, 120);
-    EPD_DrawRectangle(10, 140, 50, 30, EPD_UNFILLED);
-    EPD_DrawCircle(80, 170, 20, EPD_FILLED);
-    EPD_DrawTriangle(20, 220, 60, 260, 100, 220, EPD_UNFILLED);
-    
-    /*更新显示*/
+    /* 更新显示 */
     EPD_Update();
     
     while(1)
     {
-        /*主循环*/
+        // 主循环
     }
 }
 

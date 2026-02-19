@@ -15,28 +15,9 @@
   * 左上角为(0, 0)点
   * 横向向右为X轴，取值范围：0~151
   * 纵向向下为Y轴，取值范围：0~295
-  * 
-  *       0             X轴           151 
-  *      .-------------------------------> (152,0)
-  *    0 |
-  *      |
-  *      |
-  *      |
-  *  Y轴 |
-  *      |
-  *      |
-  *      |
-  *  295 |
-  *      v (0,296)
   */
 
 /*全局变量*********************/
-/**
-  * EPD显存数组
-  * 所有的显示函数，都只是对此显存数组进行读写
-  * 随后调用EPD_Update函数或EPD_UpdateArea函数
-  * 才会将显存数组的数据发送到EPD硬件，进行显示
-  */
 uint8_t EPD_DisplayBuf[EPD_HEIGHT][EPD_COLUMN_BYTES];
 
 /*引脚定义（根据实际硬件连接修改）*********************/
@@ -66,18 +47,7 @@ uint8_t EPD_DisplayBuf[EPD_HEIGHT][EPD_COLUMN_BYTES];
 #define EPD_SDA_HIGH()       GPIO_SetBits(EPD_SDA_PORT, EPD_SDA_PIN)
 #define EPD_SDA_LOW()        GPIO_ResetBits(EPD_SDA_PORT, EPD_SDA_PIN)
 
-/*命令定义*********************/
-#define CMD_SOFT_RESET              0x00
-#define CMD_PSR                     0x00
-#define CMD_WRITE_TEMPERATURE       0xE5
-#define CMD_APPLY_TEMPERATURE       0xE0
-#define CMD_WRITE_IMAGE_RAM_BW       0x10
-#define CMD_WRITE_IMAGE_RAM_RW       0x13
-#define CMD_POWER_ON                 0x04
-#define CMD_DISPLAY_REFRESH          0x12
-#define CMD_TURN_OFF_DC              0x02
-
-/*延时函数（简单实现）*********************/
+/*延时函数*********************/
 static void delay_ms(uint32_t ms)
 {
     uint32_t i;
@@ -97,12 +67,6 @@ static void delay_us(uint32_t us)
 }
 
 /*工具函数*********************/
-
-/**
-  * 函    数：次方函数
-  * 参    数：X 底数，Y 指数
-  * 返 回 值：X的Y次方
-  */
 static uint32_t EPD_Pow(uint32_t X, uint32_t Y)
 {
     uint32_t Result = 1;
@@ -113,13 +77,6 @@ static uint32_t EPD_Pow(uint32_t X, uint32_t Y)
     return Result;
 }
 
-/**
-  * 函    数：判断指定点是否在指定多边形内部
-  * 参    数：nvert 多边形的顶点数
-  * 参    数：vertx verty 包含多边形顶点的x和y坐标的数组
-  * 参    数：testx testy 测试点的X和y坐标
-  * 返 回 值：指定点是否在指定多边形内部，1：在内部，0：不在内部
-  */
 static uint8_t EPD_pnpoly(uint8_t nvert, int16_t *vertx, int16_t *verty, int16_t testx, int16_t testy)
 {
     int16_t i, j, c = 0;
@@ -135,13 +92,6 @@ static uint8_t EPD_pnpoly(uint8_t nvert, int16_t *vertx, int16_t *verty, int16_t
     return c;
 }
 
-/**
-  * 函    数：判断指定点是否在指定角度内部
-  * 参    数：X Y 指定点的坐标
-  * 参    数：StartAngle EndAngle 起始角度和终止角度，范围：-180~180
-  *           水平向右为0度，水平向左为180度或-180度，下方为正数，上方为负数，顺时针旋转
-  * 返 回 值：指定点是否在指定角度内部，1：在内部，0：不在内部
-  */
 static uint8_t EPD_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t EndAngle)
 {
     int16_t PointAngle;
@@ -164,12 +114,6 @@ static uint8_t EPD_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t E
 }
 
 /*引脚配置*********************/
-
-/**
-  * 函    数：EPD写SCL高低电平
-  * 参    数：BitValue 要写入SCL的电平值，范围：0/1
-  * 返 回 值：无
-  */
 void EPD_W_SCL(uint8_t BitValue)
 {
     if(BitValue)
@@ -178,11 +122,6 @@ void EPD_W_SCL(uint8_t BitValue)
         EPD_SCL_LOW();
 }
 
-/**
-  * 函    数：EPD写SDA高低电平
-  * 参    数：BitValue 要写入SDA的电平值，范围：0/1
-  * 返 回 值：无
-  */
 void EPD_W_SDA(uint8_t BitValue)
 {
     if(BitValue)
@@ -191,11 +130,6 @@ void EPD_W_SDA(uint8_t BitValue)
         EPD_SDA_LOW();
 }
 
-/**
-  * 函    数：EPD引脚初始化
-  * 参    数：无
-  * 返 回 值：无
-  */
 void EPD_GPIO_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
@@ -203,25 +137,21 @@ void EPD_GPIO_Init(void)
     
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
     
-    /*配置BUSY为输入上拉*/
     GPIO_InitStructure.GPIO_Pin = EPD_BUSY_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
     GPIO_Init(EPD_BUSY_PORT, &GPIO_InitStructure);
     
-    /*配置其他引脚为推挽输出*/
     GPIO_InitStructure.GPIO_Pin = EPD_RST_PIN | EPD_DC_PIN | EPD_CS_PIN | 
                                   EPD_SCL_PIN | EPD_SDA_PIN;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(EPD_RST_PORT, &GPIO_InitStructure);
     
-    /*在初始化前，加入适量延时，待EPD供电稳定*/
     for (i = 0; i < 1000; i ++)
     {
         for (j = 0; j < 1000; j ++);
     }
     
-    /*初始状态*/
     EPD_RST_HIGH();
     EPD_DC_HIGH();
     EPD_CS_HIGH();
@@ -230,12 +160,6 @@ void EPD_GPIO_Init(void)
 }
 
 /*通信协议*********************/
-
-/**
-  * 函    数：SPI发送一个字节
-  * 参    数：Byte 要发送的一个字节数据，范围：0x00~0xFF
-  * 返 回 值：无
-  */
 void EPD_SPI_SendByte(uint8_t Byte)
 {
     uint8_t i;
@@ -251,37 +175,22 @@ void EPD_SPI_SendByte(uint8_t Byte)
     }
 }
 
-/**
-  * 函    数：EPD写命令
-  * 参    数：Command 要写入的命令值，范围：0x00~0xFF
-  * 返 回 值：无
-  */
 void EPD_WriteCommand(uint8_t Command)
 {
     EPD_CS_LOW();
-    EPD_DC_LOW();           // 命令模式
+    EPD_DC_LOW();
     EPD_SPI_SendByte(Command);
     EPD_CS_HIGH();
 }
 
-/**
-  * 函    数：EPD写数据
-  * 参    数：Data 要写入的数据值，范围：0x00~0xFF
-  * 返 回 值：无
-  */
 void EPD_WriteData(uint8_t Data)
 {
     EPD_CS_LOW();
-    EPD_DC_HIGH();          // 数据模式
+    EPD_DC_HIGH();
     EPD_SPI_SendByte(Data);
     EPD_CS_HIGH();
 }
 
-/**
-  * 函    数：EPD等待BUSY信号
-  * 参    数：无
-  * 返 回 值：无
-  */
 void EPD_BUSY_Wait(void)
 {
     while(EPD_BUSY_READ() != Bit_SET)
@@ -291,12 +200,6 @@ void EPD_BUSY_Wait(void)
 }
 
 /*硬件配置*********************/
-
-/**
-  * 函    数：EPD硬复位
-  * 参    数：无
-  * 返 回 值：无
-  */
 void EPD_COG_Reset(void)
 {
     delay_ms(5);
@@ -311,112 +214,118 @@ void EPD_COG_Reset(void)
 }
 
 /**
-  * 函    数：EPD SRAM模式（刷新显示）
-  * 参    数：无
-  * 返 回 值：无
-  */
-void EPD_SRAM_Mode(void)
-{
-    delay_ms(50);
-    EPD_WriteCommand(CMD_POWER_ON);
-    EPD_WriteCommand(CMD_POWER_ON);
-    delay_ms(5);
-    EPD_BUSY_Wait();
-    
-    EPD_WriteCommand(CMD_DISPLAY_REFRESH);
-    EPD_WriteCommand(CMD_DISPLAY_REFRESH);
-    delay_ms(5);
-    EPD_BUSY_Wait();
-    
-    EPD_WriteCommand(CMD_TURN_OFF_DC);
-    EPD_WriteCommand(CMD_TURN_OFF_DC);
-    EPD_BUSY_Wait();
-    
-    EPD_DC_LOW();
-    EPD_CS_LOW();
-    EPD_RST_LOW();
-    EPD_CS_HIGH();
-}
-
-/**
-  * 函    数：EPD初始化
-  * 参    数：无
-  * 返 回 值：无
+  * 2.66inch屏幕初始化序列（基于官方代码）
   */
 void EPD_Init(void)
 {
     EPD_GPIO_Init();
-    
     EPD_COG_Reset();
     
-    EPD_WriteCommand(CMD_SOFT_RESET);
+    /* 软复位 */
+    EPD_WriteCommand(EPD_CMD_SOFT_RESET);
     EPD_WriteData(0xE0);
     delay_ms(5);
     
-    EPD_WriteCommand(CMD_WRITE_TEMPERATURE);
-    EPD_WriteData(0x19);
+    /* Power Setting */
+    EPD_WriteCommand(EPD_CMD_PWR);
+    EPD_WriteData(0x3F);  // VDS_EN, VDG_EN, VCOM_HV, VGHL_LV[1], VGHL_LV[0]
+    EPD_WriteData(0x00);  // VDH and VDL
+    EPD_WriteData(0x32);  // VDHR
+    EPD_WriteData(0x2A);  // VCOM Voltage
+    EPD_WriteData(0x0E);  // VGHL_LV
+    EPD_WriteData(0x2A);  // VGHL_LV
     
-    EPD_WriteCommand(CMD_APPLY_TEMPERATURE);
+    /* Booster Soft Start */
+    EPD_WriteCommand(EPD_CMD_BTST);
+    EPD_WriteData(0x17);
+    EPD_WriteData(0x17);
+    EPD_WriteData(0x17);
+    
+    /* Power Sequence */
+    EPD_WriteCommand(EPD_CMD_PWR_SEQ);
+    EPD_WriteData(0x41);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x32);
+    
+    /* PLL Control */
+    EPD_WriteCommand(EPD_CMD_PLL);
+    EPD_WriteData(0x3C);
+    
+    /* Temperature Sensor Enable */
+    EPD_WriteCommand(EPD_CMD_TSE);
+    EPD_WriteData(0x00);
+    
+    /* Panel Setting */
+    EPD_WriteCommand(EPD_CMD_PSR);
+    EPD_WriteData(0xCF);  // 152x296, LUT from OTP
+    EPD_WriteData(0x8D);  // 选择默认LUT
+    
+    /* VCOM and Data Interval */
+    EPD_WriteCommand(EPD_CMD_CDI);
+    EPD_WriteData(0x97);  // VCOM设置
+    
+    /* 设置温度 */
+    EPD_WriteCommand(EPD_CMD_WRITE_TEMPERATURE);
+    EPD_WriteData(0x19);  // 25°C
+    
+    EPD_WriteCommand(EPD_CMD_APPLY_TEMPERATURE);
     EPD_WriteData(0x02);
     
-    EPD_WriteCommand(CMD_PSR);
-    EPD_WriteData(0xCF);
-    EPD_WriteData(0x8D);
-    
-    EPD_Clear();                // 清空显存数组
+    EPD_Clear();
 }
 
 /*功能函数*********************/
-
 /**
   * 函    数：将EPD显存数组更新到EPD屏幕
   * 参    数：无
   * 返 回 值：无
+  * 注：对于墨水屏，0x00表示白色，0xFF表示黑色
   */
 void EPD_Update(void)
 {
     uint16_t i, j;
     
-    /*写入黑白图像数据*/
-    EPD_WriteCommand(CMD_WRITE_IMAGE_RAM_BW);
+    /* 写入黑白图像数据 */
+    EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_BW);
     for(i = 0; i < EPD_HEIGHT; i++)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
+            /* 显存中1表示黑色，0表示白色 */
             EPD_WriteData(EPD_DisplayBuf[i][j]);
         }
     }
     
-    /*红色通道全0（不使用）*/
-    EPD_WriteCommand(CMD_WRITE_IMAGE_RAM_RW);
+    /* 红色通道全0（不使用红色） */
+    EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_RW);
     for(i = 0; i < EPD_HEIGHT; i++)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            EPD_WriteData(0x00);
+            EPD_WriteData(0x00);  // 红色通道全0表示不显示红色
         }
     }
     
-    EPD_SRAM_Mode();                // 刷新显示
+    /* 刷新显示 */
+    EPD_WriteCommand(EPD_CMD_POWER_ON);
+    delay_ms(5);
+    EPD_BUSY_Wait();
+    
+    EPD_WriteCommand(EPD_CMD_DISPLAY_REFRESH);
+    delay_ms(5);
+    EPD_BUSY_Wait();
+    
+    EPD_WriteCommand(EPD_CMD_POWER_OFF);
+    EPD_BUSY_Wait();
 }
 
-/**
-  * 函    数：将EPD显存数组部分更新到EPD屏幕
-  * 参    数：X 指定区域左上角的横坐标，屏幕区域：0~151
-  * 参    数：Y 指定区域左上角的纵坐标，屏幕区域：0~295
-  * 参    数：Width 指定区域的宽度
-  * 参    数：Height 指定区域的高度
-  * 返 回 值：无
-  */
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
-    /*墨水屏刷新需要整屏刷新，这里直接调用全屏更新*/
-    /*如果希望优化，可以只更新指定区域的数据*/
     EPD_Update();
 }
 
 /**
-  * 函    数：将EPD显存数组全部清零
+  * 函    数：将EPD显存数组全部清零（设置为白色）
   * 参    数：无
   * 返 回 值：无
   */
@@ -427,19 +336,11 @@ void EPD_Clear(void)
     {
         for(j = 0; j < EPD_COLUMN_BYTES; j++)
         {
-            EPD_DisplayBuf[i][j] = 0x00;
+            EPD_DisplayBuf[i][j] = 0x00;  // 0x00表示白色
         }
     }
 }
 
-/**
-  * 函    数：将EPD显存数组部分清零
-  * 参    数：X 指定区域左上角的横坐标
-  * 参    数：Y 指定区域左上角的纵坐标
-  * 参    数：Width 指定区域的宽度
-  * 参    数：Height 指定区域的高度
-  * 返 回 值：无
-  */
 void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
@@ -459,11 +360,6 @@ void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
     }
 }
 
-/**
-  * 函    数：将EPD显存数组全部取反
-  * 参    数：无
-  * 返 回 值：无
-  */
 void EPD_Reverse(void)
 {
     uint16_t i, j;
@@ -476,14 +372,6 @@ void EPD_Reverse(void)
     }
 }
 
-/**
-  * 函    数：将EPD显存数组部分取反
-  * 参    数：X 指定区域左上角的横坐标
-  * 参    数：Y 指定区域左上角的纵坐标
-  * 参    数：Width 指定区域的宽度
-  * 参    数：Height 指定区域的高度
-  * 返 回 值：无
-  */
 void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
@@ -515,26 +403,54 @@ void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
   */
 void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
 {
+    uint8_t i, j;
+    uint8_t temp;
+    uint8_t pos, byteIndex, bitIndex;
+    
     if(FontSize == EPD_8X16)
     {
-        /*将ASCII字模库EPD_F8x16的指定数据以8*16的图像格式显示*/
-        EPD_ShowImage(X, Y, 8, 16, EPD_F8x16[Char - ' ']);
+        /* 8x16字体，每个字符16字节，每字节代表一列8个像素 */
+        pos = Char - ' ';  // 计算字符在字库中的位置
+        
+        for(i = 0; i < 16; i++)  // 16行（高度）
+        {
+            temp = EPD_F8x16[pos][i];  // 获取一行数据
+            
+            for(j = 0; j < 8; j++)  // 8列（宽度）
+            {
+                if(temp & (0x80 >> j))  // 如果该位为1（表示要显示的点）
+                {
+                    /* 白色背景，黑色显示，所以1表示黑色 */
+                    EPD_DrawPoint(X + j, Y + i);
+                }
+                else
+                {
+                    /* 0表示白色背景，不需要清除，因为之前已经清过区域 */
+                    /* 如果需要背景色，可以在这里处理 */
+                }
+            }
+        }
     }
     else if(FontSize == EPD_6X8)
     {
-        /*将ASCII字模库EPD_F6x8的指定数据以6*8的图像格式显示*/
-        EPD_ShowImage(X, Y, 6, 8, EPD_F6x8[Char - ' ']);
+        /* 6x8字体，每个字符6字节，每字节代表一列8个像素 */
+        pos = Char - ' ';  // 计算字符在字库中的位置
+        
+        for(i = 0; i < 8; i++)  // 8行（高度）
+        {
+            for(j = 0; j < 6; j++)  // 6列（宽度）
+            {
+                temp = EPD_F6x8[pos][j];  // 获取一列数据
+                
+                if(temp & (1 << i))  // 注意：6x8字模是行存储还是列存储需要确认
+                {
+                    EPD_DrawPoint(X + j, Y + i);
+                }
+            }
+        }
     }
 }
 
-/**
-  * 函    数：EPD显示字符串
-  * 参    数：X 指定字符串左上角的横坐标
-  * 参    数：Y 指定字符串左上角的纵坐标
-  * 参    数：String 指定要显示的字符串
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize)
 {
     uint16_t XOffset = 0;
@@ -547,15 +463,6 @@ void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize)
     }
 }
 
-/**
-  * 函    数：EPD显示数字（十进制，正整数）
-  * 参    数：X 指定数字左上角的横坐标
-  * 参    数：Y 指定数字左上角的纵坐标
-  * 参    数：Number 指定要显示的数字
-  * 参    数：Length 指定数字的长度
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
 {
     uint8_t i;
@@ -566,15 +473,6 @@ void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t 
     }
 }
 
-/**
-  * 函    数：EPD显示有符号数字（十进制，整数）
-  * 参    数：X 指定数字左上角的横坐标
-  * 参    数：Y 指定数字左上角的纵坐标
-  * 参    数：Number 指定要显示的数字
-  * 参    数：Length 指定数字的长度
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uint8_t FontSize)
 {
     uint8_t i;
@@ -598,15 +496,6 @@ void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uin
     }
 }
 
-/**
-  * 函    数：EPD显示十六进制数字（十六进制，正整数）
-  * 参    数：X 指定数字左上角的横坐标
-  * 参    数：Y 指定数字左上角的纵坐标
-  * 参    数：Number 指定要显示的数字
-  * 参    数：Length 指定数字的长度
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
 {
     uint8_t i, SingleNumber;
@@ -625,15 +514,6 @@ void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8
     }
 }
 
-/**
-  * 函    数：EPD显示二进制数字（二进制，正整数）
-  * 参    数：X 指定数字左上角的横坐标
-  * 参    数：Y 指定数字左上角的纵坐标
-  * 参    数：Number 指定要显示的数字
-  * 参    数：Length 指定数字的长度
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowBinNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
 {
     uint8_t i;
@@ -644,16 +524,6 @@ void EPD_ShowBinNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8
     }
 }
 
-/**
-  * 函    数：EPD显示浮点数字（十进制，小数）
-  * 参    数：X 指定数字左上角的横坐标
-  * 参    数：Y 指定数字左上角的纵坐标
-  * 参    数：Number 指定要显示的数字
-  * 参    数：IntLength 整数位长度
-  * 参    数：FraLength 小数位长度
-  * 参    数：FontSize 指定字体大小
-  * 返 回 值：无
-  */
 void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, uint8_t FraLength, uint8_t FontSize)
 {
     uint32_t PowNum, IntNum, FraNum;
@@ -693,10 +563,26 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
     uint16_t i, j;
     uint8_t byteIndex, bitIndex;
     uint8_t pixel;
+    uint16_t bytesPerLine;
     
-    /*将图像所在区域清空*/
-    EPD_ClearArea(X, Y, Width, Height);
+    /* 计算每行需要的字节数 */
+    bytesPerLine = (Width + 7) / 8;
     
+    /* 先清空显示区域（设置为白色）*/
+    for(j = 0; j < Height; j++)
+    {
+        for(i = 0; i < Width; i++)
+        {
+            if(X + i >= 0 && X + i < EPD_WIDTH && Y + j >= 0 && Y + j < EPD_HEIGHT)
+            {
+                byteIndex = (X + i) / 8;
+                bitIndex = 7 - ((X + i) % 8);
+                EPD_DisplayBuf[Y + j][byteIndex] &= ~(0x01 << bitIndex);  // 清为0（白色）
+            }
+        }
+    }
+    
+    /* 绘制图像 */
     for(j = 0; j < Height; j++)
     {
         for(i = 0; i < Width; i++)
@@ -706,27 +592,21 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
                 byteIndex = (X + i) / 8;
                 bitIndex = 7 - ((X + i) % 8);
                 
-                /*读取图像数据中的像素*/
-                /*图像数据按字节存储，每个字节8个像素，高位对应左边像素*/
-                pixel = (Image[j * ((Width + 7) / 8) + i / 8] >> (7 - (i % 8))) & 0x01;
+                /* 读取图像数据中的像素 */
+                /* 图像数据按字节存储，每个字节8个像素，高位对应左边像素 */
+                pixel = (Image[j * bytesPerLine + i / 8] >> (7 - (i % 8))) & 0x01;
                 
                 if(pixel)
                 {
+                    /* 1表示黑色，0表示白色 */
                     EPD_DisplayBuf[Y + j][byteIndex] |= (0x01 << bitIndex);
                 }
+                /* 如果是0（白色），已经是清空状态，不需要操作 */
             }
         }
     }
 }
 
-/**
-  * 函    数：EPD使用printf函数打印格式化字符串
-  * 参    数：X 指定格式化字符串左上角的横坐标
-  * 参    数：Y 指定格式化字符串左上角的纵坐标
-  * 参    数：FontSize 指定字体大小
-  * 参    数：format 指定要显示的格式化字符串
-  * 返 回 值：无
-  */
 void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...)
 {
     char String[256];
@@ -742,6 +622,7 @@ void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...)
   * 参    数：X 指定点的横坐标
   * 参    数：Y 指定点的纵坐标
   * 返 回 值：无
+  * 注：0表示白色，1表示黑色
   */
 void EPD_DrawPoint(int16_t X, int16_t Y)
 {
@@ -751,16 +632,28 @@ void EPD_DrawPoint(int16_t X, int16_t Y)
     {
         byteIndex = X / 8;
         bitIndex = 7 - (X % 8);
-        EPD_DisplayBuf[Y][byteIndex] |= (0x01 << bitIndex);
+        EPD_DisplayBuf[Y][byteIndex] |= (0x01 << bitIndex);  // 设置为1（黑色）
     }
 }
 
 /**
-  * 函    数：EPD获取指定位置点的值
+  * 函    数：EPD擦除指定位置的点（设置为白色）
   * 参    数：X 指定点的横坐标
   * 参    数：Y 指定点的纵坐标
-  * 返 回 值：指定位置点是否处于点亮状态，1：点亮，0：熄灭
+  * 返 回 值：无
   */
+void EPD_ClearPoint(int16_t X, int16_t Y)
+{
+    uint8_t byteIndex, bitIndex;
+    
+    if(X >= 0 && X < EPD_WIDTH && Y >= 0 && Y < EPD_HEIGHT)
+    {
+        byteIndex = X / 8;
+        bitIndex = 7 - (X % 8);
+        EPD_DisplayBuf[Y][byteIndex] &= ~(0x01 << bitIndex);  // 设置为0（白色）
+    }
+}
+
 uint8_t EPD_GetPoint(int16_t X, int16_t Y)
 {
     uint8_t byteIndex, bitIndex;
@@ -777,19 +670,13 @@ uint8_t EPD_GetPoint(int16_t X, int16_t Y)
     return 0;
 }
 
-/**
-  * 函    数：EPD画线
-  * 参    数：X0, Y0 起点坐标
-  * 参    数：X1, Y1 终点坐标
-  * 返 回 值：无
-  */
 void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
 {
     int16_t x, y, dx, dy, d, incrE, incrNE, temp;
     int16_t x0 = X0, y0 = Y0, x1 = X1, y1 = Y1;
     uint8_t yflag = 0, xyflag = 0;
     
-    if(y0 == y1)        // 横线
+    if(y0 == y1)
     {
         if(x0 > x1) {temp = x0; x0 = x1; x1 = temp;}
         for(x = x0; x <= x1; x++)
@@ -797,7 +684,7 @@ void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
             EPD_DrawPoint(x, y0);
         }
     }
-    else if(x0 == x1)   // 竖线
+    else if(x0 == x1)
     {
         if(y0 > y1) {temp = y0; y0 = y1; y1 = temp;}
         for(y = y0; y <= y1; y++)
@@ -805,7 +692,7 @@ void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
             EPD_DrawPoint(x0, y);
         }
     }
-    else                // 斜线（Bresenham算法）
+    else
     {
         if(x0 > x1)
         {
@@ -861,12 +748,6 @@ void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
     }
 }
 
-/**
-  * 函    数：EPD画虚线
-  * 参    数：X0, Y0 起点坐标
-  * 参    数：X1, Y1 终点坐标
-  * 返 回 值：无
-  */
 void EPD_DrawDashedLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
 {
     const uint8_t dashLength = 3;
@@ -967,14 +848,6 @@ void EPD_DrawDashedLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
     }
 }
 
-/**
-  * 函    数：EPD画矩形
-  * 参    数：X, Y 左上角坐标
-  * 参    数：Width 宽度
-  * 参    数：Height 高度
-  * 参    数：IsFilled 是否填充
-  * 返 回 值：无
-  */
 void EPD_DrawRectangle(int16_t X, int16_t Y, uint16_t Width, uint16_t Height, uint8_t IsFilled)
 {
     int16_t i, j;
@@ -1004,12 +877,6 @@ void EPD_DrawRectangle(int16_t X, int16_t Y, uint16_t Width, uint16_t Height, ui
     }
 }
 
-/**
-  * 函    数：EPD画三角形
-  * 参    数：X0,Y0, X1,Y1, X2,Y2 三个顶点坐标
-  * 参    数：IsFilled 是否填充
-  * 返 回 值：无
-  */
 void EPD_DrawTriangle(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1, 
                       int16_t X2, int16_t Y2, uint8_t IsFilled)
 {
@@ -1049,13 +916,6 @@ void EPD_DrawTriangle(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1,
     }
 }
 
-/**
-  * 函    数：EPD画圆
-  * 参    数：X, Y 圆心坐标
-  * 参    数：Radius 半径
-  * 参    数：IsFilled 是否填充
-  * 返 回 值：无
-  */
 void EPD_DrawCircle(int16_t X, int16_t Y, uint16_t Radius, uint8_t IsFilled)
 {
     int16_t x, y, d, j;
@@ -1115,15 +975,6 @@ void EPD_DrawCircle(int16_t X, int16_t Y, uint16_t Radius, uint8_t IsFilled)
     }
 }
 
-/**
-  * 函    数：EPD画圆弧
-  * 参    数：X, Y 圆心坐标
-  * 参    数：Radius 半径
-  * 参    数：StartAngle 起始角度
-  * 参    数：EndAngle 终止角度
-  * 参    数：IsFilled 是否填充
-  * 返 回 值：无
-  */
 void EPD_DrawArc(int16_t X, int16_t Y, uint8_t Radius, int16_t StartAngle, int16_t EndAngle, uint8_t IsFilled)
 {
     int16_t x, y, d, j;
