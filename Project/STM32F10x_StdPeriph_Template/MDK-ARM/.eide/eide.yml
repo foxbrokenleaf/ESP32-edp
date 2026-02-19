@@ -1,8 +1,8 @@
 version: "4.1"
 name: Project
 type: ARM
-deviceName: null
-packDir: null
+deviceName: STM32F103C6
+packDir: .pack/Keil/STM32F1xx_DFP.2.3.0
 srcDirs:
   - Drivers
 virtualFolder:
@@ -329,7 +329,7 @@ targets:
             - id: 1
               isChecked: true
               mem:
-                size: "0x8000"
+                size: "0x2800"
                 startAddr: "0x20000000"
               noInit: false
               tag: IRAM
@@ -366,7 +366,7 @@ targets:
               isChecked: true
               isStartup: true
               mem:
-                size: "0x80000"
+                size: "0x8000"
                 startAddr: "0x8000000"
               tag: IROM
             - id: 2

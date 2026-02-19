@@ -23,6 +23,7 @@
 #include "stm32_eval.h"
 #include <stdio.h>
 #include "EPD.h"
+#include "Delay.h"
 
 #ifdef USE_STM32100B_EVAL
  #include "stm32100b_eval_lcd.h"
@@ -69,8 +70,24 @@
 #endif
 
 /* Private macro -------------------------------------------------------------*/
+// 月天数表（非闰年）
+const uint8_t monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
 /* Private variables ---------------------------------------------------------*/
- USART_InitTypeDef USART_InitStructure;
+USART_InitTypeDef USART_InitStructure;
+uint16_t DateYear = 2026;
+uint8_t DateMonth = 2;
+uint8_t DateToday = 19;
+uint8_t DateHour = 23;
+uint8_t DateMin = 45;
+uint8_t DateSec = 5;
+uint8_t DateArrary[6][7] = {
+  {0, 0, 0, 0, 0, 0, 1,},
+  {2, 3, 4, 5, 6, 7, 8,},
+  {9, 10, 11, 12, 13, 14, 15,},
+  {16, 17, 18, 19, 20, 21, 22,},
+  {23, 24, 25, 26, 27, 28, 00,},
+  {00, 00, 00, 00, 00, 00, 00,}
+};
 
 /* Private function prototypes -----------------------------------------------*/
 #ifdef __GNUC__
@@ -82,7 +99,10 @@
 #endif /* __GNUC__ */
 
 /* Private functions ---------------------------------------------------------*/
-
+void DisplayTask(void);
+void UpdateDateTask(void);
+void PrevMonth(void);
+void NextMonth(void);
 /**
   * @brief  Main program.
   * @param  None
@@ -99,6 +119,9 @@ int main(void)
 
   /* Initialize LEDs, Key Button, LCD and COM port(USART) available on
      STM3210X-EVAL board ******************************************************/
+
+  /* Private variables ---------------------------------------------------------*/
+  uint16_t rx_dat = 0;
 
   /* USARTx configured as follow:
         - BaudRate = 115200 baud  
@@ -124,10 +147,6 @@ int main(void)
   printf(" %s\n\r", MESSAGE3);
 
   /* Turn on leds available on STM3210X-EVAL **********************************/
-  STM_EVAL_LEDOn(LED1);
-  STM_EVAL_LEDOn(LED2);
-  STM_EVAL_LEDOn(LED3);
-  STM_EVAL_LEDOn(LED4);
 
   /* Add your application code here
      */
@@ -136,27 +155,242 @@ int main(void)
     /* 初始化EPD */
     EPD_Init();
     
-    /* 清屏（全部白色） */
-    EPD_Clear();
-    
-    /* 绘制黑色实心圆 */
-    // EPD_DrawCircle(76, 148, 30, EPD_FILLED);
-    
-    /* 显示文字测试 */
-    EPD_ShowString(0, 0, "2.66inch", EPD_8X16);
-    EPD_ShowString(0, 16, "EPD Test", EPD_8X16);
-    EPD_ShowString(0, 32, "ABCDEFG", EPD_8X16);
-    EPD_ShowString(0, 48, "1234567", EPD_8X16);
-    
-    /* 更新显示 */
-    EPD_Update();
+    DisplayTask();
     
     while(1)
     {
-        // 主循环
+      Delay_s(20);
+      PrevMonth();
+      DisplayTask();
     }
 }
 
+void DisplayTask(void){
+  uint8_t i = 0;
+  uint8_t j = 0;
+    /* 清屏（全部白色） */
+    EPD_Clear();
+    
+    EPD_ShowNum(0, 20, DateYear, 4, EPD_8X16);
+    EPD_ShowNum(10, 43, DateMonth, 2, EPD_8X16);
+
+    EPD_ShowNum(10, 89, DateHour, 2, EPD_8X16);
+    EPD_ShowNum(10, 112, DateMin, 2, EPD_8X16);
+    EPD_ShowNum(10, 135, DateSec, 2, EPD_8X16);    
+
+    EPD_ShowString(40, 0, "Mon", EPD_8X16);
+    EPD_ShowString(78, 0, "Tue", EPD_8X16);
+    EPD_ShowString(118, 0, "Wed", EPD_8X16);
+    EPD_ShowString(154, 0, "Thu", EPD_8X16);
+    EPD_ShowString(192, 0, "Fri", EPD_8X16);
+    EPD_ShowString(230, 0, "Sat", EPD_8X16);
+    EPD_ShowString(268, 0, "Sun", EPD_8X16);
+
+    for(i = 0;i < 6;i++){
+      for(j = 0;j < 7;j++){
+        if(DateArrary[i][j] == DateToday) EPD_DrawRectangle(33 + (j * 38), 16 + (i * 23), 38, 23, EPD_FILLED);
+        if(DateArrary[i][j] != 0) EPD_ShowNum(44 + (j * 38), 20 + (i * 23), DateArrary[i][j], 2, EPD_8X16);
+      }
+    }
+
+    EPD_DrawLine(0, 66, 33, 85);
+    EPD_DrawLine(0, 0, 33, 15);
+
+    EPD_DrawLine(0, 16, EPD_PHYSICAL_HEIGHT, 16);
+    EPD_DrawLine(0, 39, EPD_PHYSICAL_HEIGHT, 39);
+    EPD_DrawLine(0, 62, EPD_PHYSICAL_HEIGHT, 62);
+    EPD_DrawLine(0, 85, EPD_PHYSICAL_HEIGHT, 85);
+    EPD_DrawLine(0, 108, EPD_PHYSICAL_HEIGHT, 108);
+    EPD_DrawLine(0, 131, EPD_PHYSICAL_HEIGHT, 131);
+
+    EPD_DrawLine(33, 0, 33, EPD_PHYSICAL_WIDTH);
+
+    EPD_DrawLine(71, 0, 71, EPD_PHYSICAL_WIDTH);
+    EPD_DrawLine(109, 0, 109, EPD_PHYSICAL_WIDTH);
+    EPD_DrawLine(147, 0, 147, EPD_PHYSICAL_WIDTH);
+    EPD_DrawLine(185, 0, 185, EPD_PHYSICAL_WIDTH);
+    EPD_DrawLine(223, 0, 223, EPD_PHYSICAL_WIDTH);
+    EPD_DrawLine(261, 0, 261, EPD_PHYSICAL_WIDTH);
+    
+    /* 更新显示 */
+    EPD_Update();
+}
+
+void UpdateDateTask(void){
+
+}
+
+// 闰年判断
+uint8_t isLeapYear(uint16_t year) {
+    return (year%4==0 && year%100!=0) || year%400==0;
+}
+
+// 获取月天数
+uint8_t getMonthDays(uint16_t year, uint8_t month) {
+    if(month==2 && isLeapYear(year)) return 29;
+    return monthDays[month-1];
+}
+
+// 计算某月1号是星期几 (返回0=星期一,1=星期二,...,6=星期日)
+uint8_t getFirstDayWeek(uint16_t year, uint8_t month) {
+    uint16_t y = year;
+    uint8_t m = month;
+    if(m == 1 || m == 2) {
+        m += 12;
+        y--;
+    }
+    // 基姆拉尔森计算公式返回0=星期一,1=星期二,...,6=星期日
+    return (1 + 2*m + 3*(m+1)/5 + y + y/4 - y/100 + y/400) % 7;
+}
+
+// 生成指定年月的日历数组（星期一为第0列）
+void GenerateCalendar(uint16_t year, uint8_t month) {
+    uint8_t i, j;
+    uint8_t days = getMonthDays(year, month);
+    uint8_t firstDay = getFirstDayWeek(year, month);  // 0=星期一,6=星期日
+    uint8_t date = 1;
+    
+    // 清空数组
+    for(i=0; i<6; i++) {
+        for(j=0; j<7; j++) {
+            DateArrary[i][j] = 0;
+        }
+    }
+    
+    // 填充日期
+    for(i=0; i<6 && date<=days; i++) {
+        for(j=firstDay; j<7 && date<=days; j++) {
+            DateArrary[i][j] = date++;
+        }
+        firstDay = 0;  // 从第二行开始从第0列填充
+    }
+}
+
+// 查找日期位置
+uint8_t findDate(uint8_t date, uint8_t *row, uint8_t *col) {
+    uint8_t i, j;
+    for(i=0; i<6; i++) {
+        for(j=0; j<7; j++) {
+            if(DateArrary[i][j] == date) {
+                *row = i;
+                *col = j;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+// 更新到下个月
+void NextMonth(void) {
+    uint8_t row, col;
+    uint16_t nextYear = DateYear;
+    uint8_t nextMonth = DateMonth + 1;
+    
+    // 年份处理
+    if(nextMonth > 12) {
+        nextMonth = 1;
+        nextYear++;
+    }
+    
+    // 查找当前日期位置
+    if(findDate(DateToday, &row, &col)) {
+        // 生成下个月的日历
+        GenerateCalendar(nextYear, nextMonth);
+        
+        // 取下个月相同位置的日期
+        uint8_t nextDate = DateArrary[row][col];
+        uint8_t nextMonthDays = getMonthDays(nextYear, nextMonth);
+        
+        // 如果位置无效(0)或日期超出范围
+        if(nextDate == 0 || nextDate > nextMonthDays) {
+            // 从前往后找有效日期
+            uint8_t c = col;
+            while(c < 6) {
+                c++;
+                nextDate = DateArrary[row][c];
+                if(nextDate != 0 && nextDate <= nextMonthDays) break;
+            }
+            
+            // 如果还没找到，从下一行找（如果当前不是最后一行）
+            if((nextDate == 0 || nextDate > nextMonthDays) && row < 5) {
+                uint8_t r = row + 1;
+                for(c=0; c<7; c++) {
+                    nextDate = DateArrary[r][c];
+                    if(nextDate != 0 && nextDate <= nextMonthDays) break;
+                }
+            }
+            
+            // 如果还是找不到，取下个月最后一天
+            if(nextDate == 0 || nextDate > nextMonthDays) {
+                nextDate = nextMonthDays;
+            }
+        }
+        
+        // 更新日期
+        DateYear = nextYear;
+        DateMonth = nextMonth;
+        DateToday = nextDate;
+    }
+}
+
+// 更新到上个月
+void PrevMonth(void) {
+    uint8_t row, col;
+    uint16_t prevYear = DateYear;
+    uint8_t prevMonth = DateMonth - 1;
+    
+    // 年份处理
+    if(prevMonth == 0) {
+        prevMonth = 12;
+        prevYear--;
+    }
+    
+    // 查找当前日期位置
+    if(findDate(DateToday, &row, &col)) {
+        // 生成上个月的日历
+        GenerateCalendar(prevYear, prevMonth);
+        
+        // 取上个月相同位置的日期
+        uint8_t prevDate = DateArrary[row][col];
+        uint8_t prevMonthDays = getMonthDays(prevYear, prevMonth);
+        
+        // 如果位置无效(0)或日期超出范围
+        if(prevDate == 0 || prevDate > prevMonthDays) {
+            // 从后往前找有效日期
+            uint8_t c = col;
+            while(c > 0) {
+                c--;
+                prevDate = DateArrary[row][c];
+                if(prevDate != 0 && prevDate <= prevMonthDays) break;
+            }
+            
+            // 如果还没找到，从上一行找
+            if((prevDate == 0 || prevDate > prevMonthDays) && row > 0) {
+                uint8_t r = row - 1;
+                for(c=0; c<7; c++) {
+                    prevDate = DateArrary[r][c];
+                    if(prevDate != 0 && prevDate <= prevMonthDays) break;
+                }
+            }
+            
+            // 如果还是找不到，取上个月最后一天
+            if(prevDate == 0 || prevDate > prevMonthDays) {
+                prevDate = prevMonthDays;
+            }
+        }
+        
+        // 更新日期
+        DateYear = prevYear;
+        DateMonth = prevMonth;
+        DateToday = prevDate;
+    }
+}
+
+// 初始化日历（程序启动时调用）
+void InitCalendar(void) {
+    GenerateCalendar(DateYear, DateMonth);
+}
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
