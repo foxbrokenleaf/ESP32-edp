@@ -25,6 +25,18 @@
 #include "EPD.h"
 #include "Delay.h"
 
+/* STM32大容量产品每页大小2KByte，中、小容量产品每页大小1KByte */
+#if defined (STM32F10X_HD) || defined (STM32F10X_HD_VL) ||\
+defined (STM32F10X_CL) || defined (STM32F10X_XL)
+#define FLASH_PAGE_SIZE    ((uint16_t)0x800)//2048
+#else
+#define FLASH_PAGE_SIZE    ((uint16_t)0x400)//1024
+#endif
+
+//写入的起始地址与结束地址
+#define WRITE_START_ADDR  ((uint32_t)0x08007C00)
+#define WRITE_END_ADDR    ((uint32_t)0x08008000)
+
 #ifdef USE_STM32100B_EVAL
  #include "stm32100b_eval_lcd.h"
 #elif defined USE_STM3210B_EVAL
@@ -80,14 +92,16 @@ uint8_t DateToday = 19;
 uint8_t DateHour = 23;
 uint8_t DateMin = 45;
 uint8_t DateSec = 5;
-uint8_t DateArrary[6][7] = {
-  {0, 0, 0, 0, 0, 0, 1,},
-  {2, 3, 4, 5, 6, 7, 8,},
-  {9, 10, 11, 12, 13, 14, 15,},
-  {16, 17, 18, 19, 20, 21, 22,},
-  {23, 24, 25, 26, 27, 28, 00,},
-  {00, 00, 00, 00, 00, 00, 00,}
+uint16_t DateArrary[6][7] = {
+  {0, 0, 0, 0, 0, 0, 1},
+  {2, 3, 4, 5, 6, 7, 8},
+  {9, 10, 11, 12, 13, 14, 15},
+  {16, 17, 18, 19, 20, 21, 22},
+  {23, 24, 25, 26, 27, 28, 00},
+  {00, 00, 00, 00, 00, 00, 00}
 };
+
+uint8_t RxDat = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 #ifdef __GNUC__
@@ -103,6 +117,8 @@ void DisplayTask(void);
 void UpdateDateTask(void);
 void PrevMonth(void);
 void NextMonth(void);
+int InternalFlash_Test(void);
+void ShowInternalFlashData(void);
 /**
   * @brief  Main program.
   * @param  None
@@ -121,7 +137,6 @@ int main(void)
      STM3210X-EVAL board ******************************************************/
 
   /* Private variables ---------------------------------------------------------*/
-  uint16_t rx_dat = 0;
 
   /* USARTx configured as follow:
         - BaudRate = 115200 baud  
@@ -140,6 +155,18 @@ int main(void)
 
   STM_EVAL_COMInit(COM1, &USART_InitStructure);
 
+  NVIC_InitTypeDef NVIC_InitStructure;
+  
+  /* 配置UART4中断优先级 */
+  NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
+  
+  /* 使能接收中断 */
+  USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);    
+
   /* Retarget the C library printf function to the USARTx, can be USART1 or USART2
      depending on the EVAL board you are using ********************************/
   printf("\n\r %s", MESSAGE1);
@@ -155,13 +182,44 @@ int main(void)
     /* 初始化EPD */
     EPD_Init();
     
-    DisplayTask();
-    
     while(1)
     {
-      Delay_s(20);
-      PrevMonth();
-      DisplayTask();
+      switch (RxDat)
+      {
+      case 0x01:
+        PrevMonth();
+        RxDat = 0x00;
+        break;
+      case 0x02:
+        NextMonth();
+        RxDat = 0x00;
+        break;  
+      case 0x03:
+        DateToday--;
+        RxDat = 0x00;
+        break;        
+      case 0x04:
+        DateToday++;
+        RxDat = 0x00;
+        break;
+      case 0x05:
+        ShowInternalFlashData();
+        RxDat = 0x00;
+        break;
+      case 0x06:
+        InternalFlash_Test();
+        RxDat = 0x00;
+        break;
+      case 0xFF:
+        DisplayTask();
+        RxDat = 0x00;
+        break;              
+      
+      default:
+
+        break;
+      }
+      
     }
 }
 
@@ -214,6 +272,10 @@ void DisplayTask(void){
     
     /* 更新显示 */
     EPD_Update();
+}
+
+void UpdateTimeTask(void){
+
 }
 
 void UpdateDateTask(void){
@@ -391,6 +453,91 @@ void PrevMonth(void) {
 void InitCalendar(void) {
     GenerateCalendar(DateYear, DateMonth);
 }
+
+/**
+* @brief  InternalFlash_Test,对内部FLASH进行读写测试
+* @param  None
+* @retval None
+*/
+int InternalFlash_Test(void)
+{
+  uint32_t Address = 0x00;        //记录写入的地址
+  uint8_t i = 0;
+  uint8_t j = 0;
+  uint16_t tmp = 0;
+
+
+
+  FLASH_Status FLASHStatus = FLASH_COMPLETE; //记录每次擦除的结果
+  // TestStatus MemoryProgramStatus = PASSED;//记录整个测试结果
+
+
+  /* 解锁 */
+  FLASH_Unlock();
+
+
+  /* 清空所有标志位 */
+  FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
+
+  /* 按页擦除*/
+  FLASHStatus = FLASH_ErasePage(WRITE_START_ADDR);
+
+  /* 向内部FLASH写入数据 */
+  Address = WRITE_START_ADDR;
+
+  if(FLASH_ProgramHalfWord(Address, DateYear) == FLASH_COMPLETE) Address = Address + 2;
+  if(FLASH_ProgramHalfWord(Address, (DateToday << 8) | DateMonth) == FLASH_COMPLETE) Address = Address + 2;
+  if(FLASH_ProgramHalfWord(Address, (DateMin << 8) | DateHour) == FLASH_COMPLETE) Address = Address + 2;
+  if(FLASH_ProgramHalfWord(Address, DateSec) == FLASH_COMPLETE) Address = Address + 2;
+  // printf("Write to flash!\r\n");
+  // printf("Year = %04X\r\n", DateYear);
+  // printf("Month | Day = %02X\r\n", (DateMonth << 8) | DateToday);
+  // printf("Hour | Min = %02X\r\n", (DateHour << 8) | DateMin);
+  // printf("Sec = %02X\r\n", DateSec);  
+  for(i = 0;i < 6;i++){
+    for(j = 0;(j < 7) && (FLASHStatus == FLASH_COMPLETE);j++){
+      tmp = (DateArrary[i][j] << 8) | (DateArrary[i][j] >> 8);
+      FLASHStatus = FLASH_ProgramHalfWord(Address, tmp);
+      // printf("DateArrary[i][j] = %04X\r\n",DateArrary[i][j]);
+      // printf("tmp = %04X\r\n",tmp);
+      Address = Address + 2;
+    }
+  }
+
+  FLASH_Lock();
+
+  /* 检查写入的数据是否正确 */
+  // Address = WRITE_START_ADDR;
+
+  // while ((Address < WRITE_END_ADDR)) {
+  //   if ((*(__IO uint32_t*) Address) != Data) {
+  //     // MemoryProgramStatus = FAILED;
+  //   }
+  //   Address += 4;
+  // }
+  return 0;
+}
+
+void ShowInternalFlashData(void){
+  uint32_t address = WRITE_START_ADDR;
+  uint8_t i = 0;
+  uint8_t j = 0;
+
+  printf("Year = %04d\r\n", *(__IO uint16_t*) address);
+  address += 2;
+  printf("Month = %02d\r\n", *(__IO uint8_t*) address++);
+  printf("Day = %02d\r\n", *(__IO uint8_t*) address++);
+  printf("Hour = %02d\r\n", *(__IO uint8_t*) address++);
+  printf("Min = %02d\r\n", *(__IO uint8_t*) address++);
+  printf("Sec = %02d\r\n", *(__IO uint8_t*) address++);
+  for(i = 0;i < 6;i++){
+    for(j = 0;j < 7;j++){
+      printf("%02d ", *(__IO uint16_t*) address);
+      address = address + 2;
+    }
+    printf("\r\n");
+  }  
+}
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
@@ -435,3 +582,34 @@ void assert_failed(uint8_t* file, uint32_t line)
   */
 
 
+
+void USART1_IRQHandler(void){
+    uint8_t data = 0;
+    
+    if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
+    {
+        /* 读取接收到的数据 */
+        data = USART_ReceiveData(USART1);
+        
+        /* 这里可以处理接收到的数据 */
+        RxDat = data;
+        // USART_SendData(USART1, data);
+        // ... 你的处理代码 ...
+        
+        /* 清除中断标志 */
+        USART_ClearITPendingBit(USART1, USART_IT_RXNE);
+    }
+    
+    /* 其他中断处理 */
+    if(USART_GetITStatus(USART1, USART_IT_TXE) != RESET)
+    {
+        /* 发送中断处理 */
+        USART_ClearITPendingBit(USART1, USART_IT_TXE);
+    }
+    
+    if(USART_GetITStatus(USART1, USART_IT_ORE) != RESET)
+    {
+        /* 过载错误处理 */
+        USART_ClearITPendingBit(USART1, USART_IT_ORE);
+    }
+}
