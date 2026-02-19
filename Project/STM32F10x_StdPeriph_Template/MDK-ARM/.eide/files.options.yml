@@ -1,0 +1,115 @@
+##########################################################################################
+#                        Append Compiler Options For Source Files
+##########################################################################################
+
+# syntax:
+#   <your pattern>: <compiler options>
+# For get pattern syntax, please refer to: https://www.npmjs.com/package/micromatch
+#
+# examples:
+#   'main.cpp':           --cpp11 -Og ...
+#   'src/*.c':            -gnu -O2 ...
+#   'src/lib/**/*.cpp':   --cpp11 -Os ...
+#   '!Application/*.c':   -O0
+#   '**/*.c':             -O2 -gnu ...
+
+version: "2.1"
+options:
+    STM32100E-EVAL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_sdio_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_sram.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nand.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nor.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_cec.c: ""
+    STM3210E-EVAL_XL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_spi_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm3210b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_onenand.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_sram.c: ""
+    STM32100B-EVAL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_sdio_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_sram.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nand.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nor.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_onenand.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_sram.c: ""
+    STM3210C-EVAL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_tsensor.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_sdio_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_spi_flash.c: ""
+            <virtual_root>/STM32_EVAL/stm3210b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_sram.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nand.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nor.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_onenand.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_sram.c: ""
+    STM3210E-EVAL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_spi_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm3210b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_onenand.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_sram.c: ""
+    STM3210B-EVAL:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/STM32_EVAL/stm32_eval_i2c_ee.c: ""
+            <virtual_root>/STM32_EVAL/stm32_eval_sdio_sd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_sram.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nand.c: ""
+            <virtual_root>/STM32_EVAL/stm3210e_eval_fsmc_nor.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm3210c_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100b_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_lcd.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_ioe.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_cec.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_onenand.c: ""
+            <virtual_root>/STM32_EVAL/stm32100e_eval_fsmc_sram.c: ""
