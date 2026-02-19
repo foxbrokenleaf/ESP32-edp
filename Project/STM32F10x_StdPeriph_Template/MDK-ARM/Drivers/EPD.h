@@ -4,10 +4,30 @@
 #include <stdint.h>
 #include "EPD_Data.h"
 
-/*屏幕尺寸定义*********************/
-#define EPD_WIDTH               152     // 屏幕宽度
-#define EPD_HEIGHT              296     // 屏幕高度
-#define EPD_COLUMN_BYTES        19      // 每行字节数 (152/8)
+/*屏幕方向定义*********************/
+#define EPD_ORIENTATION_PORTRAIT        0   // 竖屏（默认）
+#define EPD_ORIENTATION_LANDSCAPE       1   // 横屏（顺时针旋转90度）
+#define EPD_ORIENTATION_PORTRAIT_180    2   // 竖屏旋转180度
+#define EPD_ORIENTATION_LANDSCAPE_180   3   // 横屏旋转180度（逆时针旋转90度）
+
+/*选择屏幕方向（用户可修改）*********************/
+#define EPD_ORIENTATION                 EPD_ORIENTATION_LANDSCAPE
+
+/*物理屏幕尺寸（固定值，与方向无关）*********************/
+#define EPD_PHYSICAL_WIDTH              152
+#define EPD_PHYSICAL_HEIGHT             296
+#define EPD_PHYSICAL_COLUMN_BYTES       19      // 152/8
+
+/*逻辑屏幕尺寸（根据方向自动调整，供应用层使用）*********************/
+#if (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT) || (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT_180)
+    #define EPD_WIDTH               152     // 竖屏逻辑宽度
+    #define EPD_HEIGHT              296     // 竖屏逻辑高度
+    #define EPD_COLUMN_BYTES        19      // 竖屏每行字节数
+#else
+    #define EPD_WIDTH               296     // 横屏逻辑宽度
+    #define EPD_HEIGHT              152     // 横屏逻辑高度
+    #define EPD_COLUMN_BYTES        37      // 横屏每行字节数 (296/8)
+#endif
 
 /*字体大小定义*********************/
 #define EPD_8X16                8       // 宽8像素，高16像素
@@ -17,22 +37,22 @@
 #define EPD_UNFILLED            0
 #define EPD_FILLED              1
 
-/*命令定义（保持与官方代码一致）*********************/
+/*命令定义*********************/
 #define EPD_CMD_PSR                     0x00  // Panel Setting
-#define EPD_CMD_PWR                      0x01  // Power Setting
-#define EPD_CMD_PWR_SEQ                   0x03  // Power Sequence
-#define EPD_CMD_BTST                      0x06  // Booster Soft Start
-#define EPD_CMD_PLL                       0x30  // PLL Control
-#define EPD_CMD_TSE                       0x41  // Temperature Sensor Enable
-#define EPD_CMD_CDI                       0x50  // VCOM and Data Interval
-#define EPD_CMD_WRITE_TEMPERATURE       0xE5  // Write Temperature
-#define EPD_CMD_APPLY_TEMPERATURE       0xE0  // Apply Temperature
+#define EPD_CMD_PWR                     0x01  // Power Setting
+#define EPD_CMD_PWR_SEQ                  0x03  // Power Sequence
+#define EPD_CMD_BTST                     0x06  // Booster Soft Start
+#define EPD_CMD_PLL                      0x30  // PLL Control
+#define EPD_CMD_TSE                      0x41  // Temperature Sensor Enable
+#define EPD_CMD_CDI                      0x50  // VCOM and Data Interval
+#define EPD_CMD_WRITE_TEMPERATURE        0xE5  // Write Temperature
+#define EPD_CMD_APPLY_TEMPERATURE        0xE0  // Apply Temperature
 #define EPD_CMD_WRITE_IMAGE_RAM_BW       0x10  // Write Black-White Image RAM
 #define EPD_CMD_WRITE_IMAGE_RAM_RW       0x13  // Write Red Image RAM
 #define EPD_CMD_POWER_ON                 0x04  // Power On
-#define EPD_CMD_POWER_OFF                 0x02  // Power Off
+#define EPD_CMD_POWER_OFF                0x02  // Power Off
 #define EPD_CMD_DISPLAY_REFRESH          0x12  // Display Refresh
-#define EPD_CMD_SOFT_RESET              0x00  // Soft Reset
+#define EPD_CMD_SOFT_RESET               0x00  // Soft Reset
 
 /*函数声明*********************/
 void EPD_Init(void);
@@ -65,5 +85,8 @@ void EPD_DrawArc(int16_t X, int16_t Y, uint8_t Radius, int16_t StartAngle, int16
 void EPD_WriteCommand(uint8_t Command);
 void EPD_WriteData(uint8_t Data);
 void EPD_BUSY_Wait(void);
+
+/*调试函数*/
+void EPD_TestPattern(void);  // 测试图案，用于验证屏幕是否正常工作
 
 #endif

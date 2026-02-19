@@ -140,13 +140,13 @@ int main(void)
     EPD_Clear();
     
     /* 绘制黑色实心圆 */
-    EPD_DrawCircle(76, 148, 30, EPD_FILLED);
+    // EPD_DrawCircle(76, 148, 30, EPD_FILLED);
     
     /* 显示文字测试 */
-    EPD_ShowString(10, 50, "2.66inch", EPD_8X16);
-    EPD_ShowString(10, 70, "EPD Test", EPD_8X16);
-    EPD_ShowString(10, 90, "ABCDEFG", EPD_8X16);
-    EPD_ShowString(10, 110, "1234567", EPD_8X16);
+    EPD_ShowString(0, 0, "2.66inch", EPD_8X16);
+    EPD_ShowString(0, 16, "EPD Test", EPD_8X16);
+    EPD_ShowString(0, 32, "ABCDEFG", EPD_8X16);
+    EPD_ShowString(0, 48, "1234567", EPD_8X16);
     
     /* 更新显示 */
     EPD_Update();

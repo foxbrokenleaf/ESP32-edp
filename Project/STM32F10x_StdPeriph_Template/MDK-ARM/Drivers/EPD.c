@@ -10,17 +10,13 @@
   * 数据存储格式：
   * 纵向8点，高位在下，先从左到右，再从上到下
   * 每一个Bit对应一个像素点
-  * 
-  * 坐标轴定义：
-  * 左上角为(0, 0)点
-  * 横向向右为X轴，取值范围：0~151
-  * 纵向向下为Y轴，取值范围：0~295
   */
 
 /*全局变量*********************/
-uint8_t EPD_DisplayBuf[EPD_HEIGHT][EPD_COLUMN_BYTES];
+/* 物理显存 - 始终按物理尺寸定义 */
+static uint8_t EPD_DisplayBuf[EPD_PHYSICAL_HEIGHT][EPD_PHYSICAL_COLUMN_BYTES];
 
-/*引脚定义（根据实际硬件连接修改）*********************/
+/*引脚定义*********************/
 #define EPD_BUSY_PORT   GPIOA
 #define EPD_BUSY_PIN    GPIO_Pin_5
 #define EPD_RST_PORT    GPIOA
@@ -46,6 +42,11 @@ uint8_t EPD_DisplayBuf[EPD_HEIGHT][EPD_COLUMN_BYTES];
 #define EPD_SCL_LOW()        GPIO_ResetBits(EPD_SCL_PORT, EPD_SCL_PIN)
 #define EPD_SDA_HIGH()       GPIO_SetBits(EPD_SDA_PORT, EPD_SDA_PIN)
 #define EPD_SDA_LOW()        GPIO_ResetBits(EPD_SDA_PORT, EPD_SDA_PIN)
+
+/*物理屏幕尺寸（固定值）*********************/
+#define EPD_PHYSICAL_WIDTH      152
+#define EPD_PHYSICAL_HEIGHT     296
+#define EPD_PHYSICAL_COLUMN_BYTES 19
 
 /*延时函数*********************/
 static void delay_ms(uint32_t ms)
@@ -109,6 +110,70 @@ static uint8_t EPD_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t E
         {
             return 1;
         }
+    }
+    return 0;
+}
+
+/**
+  * 函    数：坐标转换（将逻辑坐标系坐标转换为物理显存坐标）
+  * 修正：确保横屏时数据正确映射到整个屏幕
+  */
+static void EPD_LogicToPhys(int16_t logicX, int16_t logicY, int16_t *physX, int16_t *physY)
+{
+#if (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT)
+    /* 竖屏：坐标不变 */
+    *physX = logicX;
+    *physY = logicY;
+    
+#elif (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT_180)
+    /* 竖屏180度：旋转180度 */
+    *physX = EPD_PHYSICAL_WIDTH - 1 - logicX;
+    *physY = EPD_PHYSICAL_HEIGHT - 1 - logicY;
+    
+#elif (EPD_ORIENTATION == EPD_ORIENTATION_LANDSCAPE)
+    /* 横屏（顺时针旋转90度）
+       逻辑宽度 296，逻辑高度 152
+       物理宽度 152，物理高度 296
+       
+       映射关系：
+       逻辑X (0-295) 映射到 物理Y (0-295)
+       逻辑Y (0-151) 映射到 物理X (0-151)
+       并且需要将逻辑X的方向反转，因为屏幕扫描是从左到右
+    */
+    *physX = logicY;                          // 逻辑Y -> 物理X
+    *physY = EPD_PHYSICAL_HEIGHT - 1 - logicX; // 逻辑X反转后 -> 物理Y
+    
+#elif (EPD_ORIENTATION == EPD_ORIENTATION_LANDSCAPE_180)
+    /* 横屏180度（逆时针旋转90度） */
+    *physX = EPD_PHYSICAL_WIDTH - 1 - logicY;  // 逻辑Y反转 -> 物理X
+    *physY = logicX;                            // 逻辑X -> 物理Y
+    
+#else
+    *physX = logicX;
+    *physY = logicY;
+#endif
+}
+
+/**
+  * 函    数：检查点是否在逻辑坐标系范围内
+  */
+static uint8_t EPD_IsInLogicRange(int16_t X, int16_t Y)
+{
+    if(X >= 0 && X < EPD_WIDTH && Y >= 0 && Y < EPD_HEIGHT)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+  * 函    数：检查点是否在物理屏幕范围内
+  */
+static uint8_t EPD_IsInPhysicalRange(int16_t X, int16_t Y)
+{
+    if(X >= 0 && X < EPD_PHYSICAL_WIDTH && Y >= 0 && Y < EPD_PHYSICAL_HEIGHT)
+    {
+        return 1;
     }
     return 0;
 }
@@ -214,7 +279,7 @@ void EPD_COG_Reset(void)
 }
 
 /**
-  * 2.66inch屏幕初始化序列（基于官方代码）
+  * 2.66inch屏幕初始化序列
   */
 void EPD_Init(void)
 {
@@ -228,12 +293,12 @@ void EPD_Init(void)
     
     /* Power Setting */
     EPD_WriteCommand(EPD_CMD_PWR);
-    EPD_WriteData(0x3F);  // VDS_EN, VDG_EN, VCOM_HV, VGHL_LV[1], VGHL_LV[0]
-    EPD_WriteData(0x00);  // VDH and VDL
-    EPD_WriteData(0x32);  // VDHR
-    EPD_WriteData(0x2A);  // VCOM Voltage
-    EPD_WriteData(0x0E);  // VGHL_LV
-    EPD_WriteData(0x2A);  // VGHL_LV
+    EPD_WriteData(0x3F);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x32);
+    EPD_WriteData(0x2A);
+    EPD_WriteData(0x0E);
+    EPD_WriteData(0x2A);
     
     /* Booster Soft Start */
     EPD_WriteCommand(EPD_CMD_BTST);
@@ -258,11 +323,11 @@ void EPD_Init(void)
     /* Panel Setting */
     EPD_WriteCommand(EPD_CMD_PSR);
     EPD_WriteData(0xCF);  // 152x296, LUT from OTP
-    EPD_WriteData(0x8D);  // 选择默认LUT
+    EPD_WriteData(0x8D);  // 使用默认LUT
     
     /* VCOM and Data Interval */
     EPD_WriteCommand(EPD_CMD_CDI);
-    EPD_WriteData(0x97);  // VCOM设置
+    EPD_WriteData(0x97);
     
     /* 设置温度 */
     EPD_WriteCommand(EPD_CMD_WRITE_TEMPERATURE);
@@ -274,12 +339,60 @@ void EPD_Init(void)
     EPD_Clear();
 }
 
+/**
+  * 函    数：测试图案 - 用于验证屏幕是否正常工作
+  */
+void EPD_TestPattern(void)
+{
+    uint16_t i;
+    
+    /* 清屏 */
+    EPD_Clear();
+    
+    /* 绘制完整的边框 */
+    for(i = 0; i < EPD_WIDTH; i++)
+    {
+        EPD_DrawPoint(i, 0);                 // 上边框
+        EPD_DrawPoint(i, EPD_HEIGHT - 1);    // 下边框
+    }
+    for(i = 0; i < EPD_HEIGHT; i++)
+    {
+        EPD_DrawPoint(0, i);                  // 左边框
+        EPD_DrawPoint(EPD_WIDTH - 1, i);      // 右边框
+    }
+    
+    /* 绘制对角线 */
+    for(i = 0; i < EPD_WIDTH && i < EPD_HEIGHT; i++)
+    {
+        EPD_DrawPoint(i, i);                          // 左上到右下
+        EPD_DrawPoint(EPD_WIDTH - 1 - i, i);          // 右上到左下
+    }
+    
+    /* 绘制中心十字线 */
+    for(i = 0; i < EPD_WIDTH; i++)
+    {
+        EPD_DrawPoint(i, EPD_HEIGHT/2);        // 水平中线
+    }
+    for(i = 0; i < EPD_HEIGHT; i++)
+    {
+        EPD_DrawPoint(EPD_WIDTH/2, i);         // 垂直中线
+    }
+    
+    /* 在四个角显示文字 */
+    EPD_ShowString(10, 10, "TL", EPD_8X16);                    // 左上
+    EPD_ShowString(EPD_WIDTH - 40, 10, "TR", EPD_8X16);       // 右上
+    EPD_ShowString(10, EPD_HEIGHT - 30, "BL", EPD_8X16);      // 左下
+    EPD_ShowString(EPD_WIDTH - 40, EPD_HEIGHT - 30, "BR", EPD_8X16); // 右下
+    
+    /* 在中心显示文字 */
+    EPD_ShowString(EPD_WIDTH/2 - 40, EPD_HEIGHT/2 - 8, "TEST", EPD_8X16);
+    
+    EPD_Update();
+}
+
 /*功能函数*********************/
 /**
   * 函    数：将EPD显存数组更新到EPD屏幕
-  * 参    数：无
-  * 返 回 值：无
-  * 注：对于墨水屏，0x00表示黑色，0xFF表示白色
   */
 void EPD_Update(void)
 {
@@ -287,20 +400,19 @@ void EPD_Update(void)
     
     /* 写入黑白图像数据 */
     EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_BW);
-    for(i = 0; i < EPD_HEIGHT; i++)
+    for(i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
     {
-        for(j = 0; j < EPD_COLUMN_BYTES; j++)
+        for(j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
         {
-            /* 显存中0表示黑色，1表示白色 */
             EPD_WriteData(EPD_DisplayBuf[i][j]);
         }
     }
     
-    /* 红色通道全0（不使用红色） */
+    /* 红色通道全0 */
     EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_RW);
-    for(i = 0; i < EPD_HEIGHT; i++)
+    for(i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
     {
-        for(j = 0; j < EPD_COLUMN_BYTES; j++)
+        for(j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
         {
             EPD_WriteData(0x00);
         }
@@ -321,140 +433,134 @@ void EPD_Update(void)
 
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
+    /* 简化处理，直接更新全屏 */
     EPD_Update();
 }
 
 /**
-  * 函    数：将EPD显存数组全部清零（设置为黑色？还是白色？）
-  * 注：根据您的描述，应该是设置为白色（背景）
-  * 参    数：无
-  * 返 回 值：无
+  * 函    数：将EPD显存数组全部清零（设置为白色）
   */
 void EPD_Clear(void)
 {
     uint16_t i, j;
-    for(i = 0; i < EPD_HEIGHT; i++)
+    for(i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
     {
-        for(j = 0; j < EPD_COLUMN_BYTES; j++)
+        for(j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
         {
-            EPD_DisplayBuf[i][j] = 0xFF;  // 0xFF表示全部为1（白色）
+            EPD_DisplayBuf[i][j] = 0xFF;
         }
     }
 }
 
 /**
   * 函    数：将EPD显存数组部分清零（设置为白色）
-  * 参    数：X 指定区域左上角的横坐标
-  * 参    数：Y 指定区域左上角的纵坐标
-  * 参    数：Width 指定区域的宽度
-  * 参    数：Height 指定区域的高度
-  * 返 回 值：无
   */
 void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
     for(j = Y; j < Y + Height; j++)
     {
         for(i = X; i < X + Width; i++)
         {
-            if(i >= 0 && i < EPD_WIDTH && j >= 0 && j < EPD_HEIGHT)
+            if(EPD_IsInLogicRange(i, j))
             {
-                byteIndex = i / 8;
-                bitIndex = 7 - (i % 8);
-                EPD_DisplayBuf[j][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
+                EPD_LogicToPhys(i, j, &physX, &physY);
+                
+                if(EPD_IsInPhysicalRange(physX, physY))
+                {
+                    byteIndex = physX / 8;
+                    bitIndex = 7 - (physX % 8);
+                    EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                }
             }
         }
     }
 }
 
 /**
-  * 函    数：将EPD显存数组全部取反（黑白反转）
-  * 参    数：无
-  * 返 回 值：无
+  * 函    数：将EPD显存数组全部取反
   */
 void EPD_Reverse(void)
 {
     uint16_t i, j;
-    for(i = 0; i < EPD_HEIGHT; i++)
+    for(i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
     {
-        for(j = 0; j < EPD_COLUMN_BYTES; j++)
+        for(j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
         {
-            EPD_DisplayBuf[i][j] ^= 0xFF;  // 取反
+            EPD_DisplayBuf[i][j] ^= 0xFF;
         }
     }
 }
 
 /**
-  * 函    数：将EPD显存数组部分取反（黑白反转）
-  * 参    数：X 指定区域左上角的横坐标
-  * 参    数：Y 指定区域左上角的纵坐标
-  * 参    数：Width 指定区域的宽度
-  * 参    数：Height 指定区域的高度
-  * 返 回 值：无
+  * 函    数：将EPD显存数组部分取反
   */
 void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
     int16_t i, j;
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
     for(j = Y; j < Y + Height; j++)
     {
         for(i = X; i < X + Width; i++)
         {
-            if(i >= 0 && i < EPD_WIDTH && j >= 0 && j < EPD_HEIGHT)
+            if(EPD_IsInLogicRange(i, j))
             {
-                byteIndex = i / 8;
-                bitIndex = 7 - (i % 8);
-                EPD_DisplayBuf[j][byteIndex] ^= (0x01 << bitIndex);  // 单个位取反
+                EPD_LogicToPhys(i, j, &physX, &physY);
+                
+                if(EPD_IsInPhysicalRange(physX, physY))
+                {
+                    byteIndex = physX / 8;
+                    bitIndex = 7 - (physX % 8);
+                    EPD_DisplayBuf[physY][byteIndex] ^= (0x01 << bitIndex);
+                }
             }
         }
     }
 }
 
 /**
-  * 函    数：EPD显示一个字符（黑色前景，白色背景）
-  * 参    数：X 指定字符左上角的横坐标
-  * 参    数：Y 指定字符左上角的纵坐标
-  * 参    数：Char 指定要显示的字符
-  * 参    数：FontSize 指定字体大小
-  *           范围：EPD_8X16		宽8像素，高16像素
-  *                 EPD_6X8		宽6像素，高8像素
-  * 返 回 值：无
+  * 函    数：EPD显示一个字符
   */
 void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
 {
     uint8_t i, j;
     uint8_t temp;
     uint8_t pos;
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
     if(FontSize == EPD_8X16)
     {
-        /* 8x16字体，每个字符16字节，每字节代表一列8个像素 */
-        pos = Char - ' ';  // 计算字符在字库中的位置
+        pos = Char - ' ';
         
-        for(i = 0; i < 16; i++)  // 16行（高度）
+        for(i = 0; i < 16; i++)
         {
-            temp = EPD_F8x16[pos][i];  // 获取一行数据
+            temp = EPD_F8x16[pos][i];
             
-            for(j = 0; j < 8; j++)  // 8列（宽度）
+            for(j = 0; j < 8; j++)
             {
-                if(X + j >= 0 && X + j < EPD_WIDTH && Y + i >= 0 && Y + i < EPD_HEIGHT)
+                if(EPD_IsInLogicRange(X + j, Y + i))
                 {
-                    byteIndex = (X + j) / 8;
-                    bitIndex = 7 - ((X + j) % 8);
+                    EPD_LogicToPhys(X + j, Y + i, &physX, &physY);
                     
-                    if(temp & (0x80 >> j))  // 如果该位为1（表示要显示的点）
+                    if(EPD_IsInPhysicalRange(physX, physY))
                     {
-                        /* 设置为黑色（0） */
-                        EPD_DisplayBuf[Y + i][byteIndex] &= ~(0x01 << bitIndex);
-                    }
-                    else
-                    {
-                        /* 设置为白色（1） */
-                        EPD_DisplayBuf[Y + i][byteIndex] |= (0x01 << bitIndex);
+                        byteIndex = physX / 8;
+                        bitIndex = 7 - (physX % 8);
+                        
+                        if(temp & (0x80 >> j))
+                        {
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+                        }
+                        else
+                        {
+                            EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                        }
                     }
                 }
             }
@@ -462,30 +568,31 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
     }
     else if(FontSize == EPD_6X8)
     {
-        /* 6x8字体，每个字符6字节，每字节代表一列8个像素？还是每字节代表一行？ */
-        /* 根据常见6x8字库格式，通常是每字节代表一列8个像素 */
-        pos = Char - ' ';  // 计算字符在字库中的位置
+        pos = Char - ' ';
         
-        for(j = 0; j < 6; j++)  // 6列（宽度）
+        for(j = 0; j < 6; j++)
         {
-            temp = EPD_F6x8[pos][j];  // 获取一列数据
+            temp = EPD_F6x8[pos][j];
             
-            for(i = 0; i < 8; i++)  // 8行（高度）
+            for(i = 0; i < 8; i++)
             {
-                if(X + j >= 0 && X + j < EPD_WIDTH && Y + i >= 0 && Y + i < EPD_HEIGHT)
+                if(EPD_IsInLogicRange(X + j, Y + i))
                 {
-                    byteIndex = (X + j) / 8;
-                    bitIndex = 7 - ((X + j) % 8);
+                    EPD_LogicToPhys(X + j, Y + i, &physX, &physY);
                     
-                    if(temp & (1 << i))  // 检查该行是否有像素
+                    if(EPD_IsInPhysicalRange(physX, physY))
                     {
-                        /* 设置为黑色（0） */
-                        EPD_DisplayBuf[Y + i][byteIndex] &= ~(0x01 << bitIndex);
-                    }
-                    else
-                    {
-                        /* 设置为白色（1） */
-                        EPD_DisplayBuf[Y + i][byteIndex] |= (0x01 << bitIndex);
+                        byteIndex = physX / 8;
+                        bitIndex = 7 - (physX % 8);
+                        
+                        if(temp & (1 << i))
+                        {
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+                        }
+                        else
+                        {
+                            EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                        }
                     }
                 }
             }
@@ -593,34 +700,32 @@ void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, ui
 
 /**
   * 函    数：EPD显示图像
-  * 参    数：X 指定图像左上角的横坐标
-  * 参    数：Y 指定图像左上角的纵坐标
-  * 参    数：Width 指定图像的宽度
-  * 参    数：Height 指定图像的高度
-  * 参    数：Image 指定要显示的图像
-  * 返 回 值：无
-  * 注：图像数据中1表示黑色，0表示白色
   */
 void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const uint8_t *Image)
 {
     uint16_t i, j;
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     uint8_t pixel;
     uint16_t bytesPerLine;
     
-    /* 计算每行需要的字节数 */
     bytesPerLine = (Width + 7) / 8;
     
-    /* 先清空显示区域（设置为白色）*/
+    /* 先清空显示区域 */
     for(j = 0; j < Height; j++)
     {
         for(i = 0; i < Width; i++)
         {
-            if(X + i >= 0 && X + i < EPD_WIDTH && Y + j >= 0 && Y + j < EPD_HEIGHT)
+            if(EPD_IsInLogicRange(X + i, Y + j))
             {
-                byteIndex = (X + i) / 8;
-                bitIndex = 7 - ((X + i) % 8);
-                EPD_DisplayBuf[Y + j][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
+                EPD_LogicToPhys(X + i, Y + j, &physX, &physY);
+                
+                if(EPD_IsInPhysicalRange(physX, physY))
+                {
+                    byteIndex = physX / 8;
+                    bitIndex = 7 - (physX % 8);
+                    EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                }
             }
         }
     }
@@ -630,20 +735,22 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
     {
         for(i = 0; i < Width; i++)
         {
-            if(X + i >= 0 && X + i < EPD_WIDTH && Y + j >= 0 && Y + j < EPD_HEIGHT)
+            if(EPD_IsInLogicRange(X + i, Y + j))
             {
-                byteIndex = (X + i) / 8;
-                bitIndex = 7 - ((X + i) % 8);
+                EPD_LogicToPhys(X + i, Y + j, &physX, &physY);
                 
-                /* 读取图像数据中的像素 */
-                pixel = (Image[j * bytesPerLine + i / 8] >> (7 - (i % 8))) & 0x01;
-                
-                if(pixel)
+                if(EPD_IsInPhysicalRange(physX, physY))
                 {
-                    /* 1表示黑色，设置为0 */
-                    EPD_DisplayBuf[Y + j][byteIndex] &= ~(0x01 << bitIndex);
+                    byteIndex = physX / 8;
+                    bitIndex = 7 - (physX % 8);
+                    
+                    pixel = (Image[j * bytesPerLine + i / 8] >> (7 - (i % 8))) & 0x01;
+                    
+                    if(pixel)
+                    {
+                        EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+                    }
                 }
-                /* 如果是0（白色），已经是白色状态，不需要操作 */
             }
         }
     }
@@ -661,57 +768,69 @@ void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...)
 
 /**
   * 函    数：EPD在指定位置画一个点（黑色）
-  * 参    数：X 指定点的横坐标
-  * 参    数：Y 指定点的纵坐标
-  * 返 回 值：无
-  * 注：0表示黑色，1表示白色
   */
 void EPD_DrawPoint(int16_t X, int16_t Y)
 {
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
-    if(X >= 0 && X < EPD_WIDTH && Y >= 0 && Y < EPD_HEIGHT)
+    if(EPD_IsInLogicRange(X, Y))
     {
-        byteIndex = X / 8;
-        bitIndex = 7 - (X % 8);
-        EPD_DisplayBuf[Y][byteIndex] &= ~(0x01 << bitIndex);  // 设置为0（黑色）
+        EPD_LogicToPhys(X, Y, &physX, &physY);
+        
+        if(EPD_IsInPhysicalRange(physX, physY))
+        {
+            byteIndex = physX / 8;
+            bitIndex = 7 - (physX % 8);
+            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+        }
     }
 }
 
 /**
   * 函    数：EPD擦除指定位置的点（设置为白色）
-  * 参    数：X 指定点的横坐标
-  * 参    数：Y 指定点的纵坐标
-  * 返 回 值：无
   */
 void EPD_ClearPoint(int16_t X, int16_t Y)
 {
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
-    if(X >= 0 && X < EPD_WIDTH && Y >= 0 && Y < EPD_HEIGHT)
+    if(EPD_IsInLogicRange(X, Y))
     {
-        byteIndex = X / 8;
-        bitIndex = 7 - (X % 8);
-        EPD_DisplayBuf[Y][byteIndex] |= (0x01 << bitIndex);  // 设置为1（白色）
+        EPD_LogicToPhys(X, Y, &physX, &physY);
+        
+        if(EPD_IsInPhysicalRange(physX, physY))
+        {
+            byteIndex = physX / 8;
+            bitIndex = 7 - (physX % 8);
+            EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+        }
     }
 }
 
 uint8_t EPD_GetPoint(int16_t X, int16_t Y)
 {
+    int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
     
-    if(X >= 0 && X < EPD_WIDTH && Y >= 0 && Y < EPD_HEIGHT)
+    if(EPD_IsInLogicRange(X, Y))
     {
-        byteIndex = X / 8;
-        bitIndex = 7 - (X % 8);
-        if(EPD_DisplayBuf[Y][byteIndex] & (0x01 << bitIndex))
+        EPD_LogicToPhys(X, Y, &physX, &physY);
+        
+        if(EPD_IsInPhysicalRange(physX, physY))
         {
-            return 1;
+            byteIndex = physX / 8;
+            bitIndex = 7 - (physX % 8);
+            if(EPD_DisplayBuf[physY][byteIndex] & (0x01 << bitIndex))
+            {
+                return 1;
+            }
         }
     }
     return 0;
 }
 
+/* 以下绘图函数保持不变 */
 void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
 {
     int16_t x, y, dx, dy, d, incrE, incrNE, temp;
