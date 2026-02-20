@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include "EPD.h"
 #include "Delay.h"
+#include "time.h"
+#include "Key.h"
 
 /* STM32大容量产品每页大小2KByte，中、小容量产品每页大小1KByte */
 #if defined (STM32F10X_HD) || defined (STM32F10X_HD_VL) ||\
@@ -88,10 +90,10 @@ const uint8_t monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
 USART_InitTypeDef USART_InitStructure;
 uint16_t DateYear = 2026;
 uint8_t DateMonth = 2;
-uint8_t DateToday = 19;
-uint8_t DateHour = 23;
-uint8_t DateMin = 45;
-uint8_t DateSec = 5;
+uint8_t DateToday = 20;
+uint8_t DateHour = 14;
+uint8_t DateMin = 44;
+uint8_t DateSec = 32;
 uint16_t DateArrary[6][7] = {
   {0, 0, 0, 0, 0, 0, 1},
   {2, 3, 4, 5, 6, 7, 8},
@@ -102,6 +104,8 @@ uint16_t DateArrary[6][7] = {
 };
 
 uint8_t RxDat = 0;
+uint8_t TimeRead_Flag = 0;
+uint8_t UpdateDay_Flag = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 #ifdef __GNUC__
@@ -115,10 +119,17 @@ uint8_t RxDat = 0;
 /* Private functions ---------------------------------------------------------*/
 void DisplayTask(void);
 void UpdateDateTask(void);
+uint8_t getMonthDays(uint16_t year, uint8_t month);
+void GenerateCalendar(uint16_t year, uint8_t month);
 void PrevMonth(void);
 void NextMonth(void);
 int InternalFlash_Test(void);
+void SerialShowDate(void);
+void GoToday(void);
 void ShowInternalFlashData(void);
+void RTC_Init(void);
+void RTC_SetTime(uint8_t hour, uint8_t min, uint8_t sec);
+void RTC_GetTime(void);
 /**
   * @brief  Main program.
   * @param  None
@@ -137,7 +148,8 @@ int main(void)
      STM3210X-EVAL board ******************************************************/
 
   /* Private variables ---------------------------------------------------------*/
-
+  uint32_t tick = 0;
+  KeyEvent key_events[KEY_NUM];
   /* USARTx configured as follow:
         - BaudRate = 115200 baud  
         - Word Length = 8 Bits
@@ -180,7 +192,11 @@ int main(void)
 
   /* Infinite loop */
     /* 初始化EPD */
+    RTC_Init();
     EPD_Init();
+    Key_Init();
+
+    GenerateCalendar(DateYear, DateMonth);
     
     while(1)
     {
@@ -210,6 +226,19 @@ int main(void)
         InternalFlash_Test();
         RxDat = 0x00;
         break;
+      case 0x07:
+        RTC_SetTime(14, 54, 00);
+        RxDat = 0x00;
+        break;
+      case 0x08:
+        SerialShowDate();
+        RxDat = 0x00;
+        break;
+      case 0x09:
+        EPD_Clear();
+        EPD_Update();
+        RxDat = 0x00;
+        break;
       case 0xFF:
         DisplayTask();
         RxDat = 0x00;
@@ -219,7 +248,65 @@ int main(void)
 
         break;
       }
+      if(TimeRead_Flag){
+        // struct tm *time;                // 定义一个时间结构体
+        // time_t time_temp = RTC_GetCounter();   // 获取RTC计数器
+        // time = localtime(&time_temp);   // 将Unix时间戳转换为时间结构体        
+        // printf("unix:%d\n",time_temp);
+        // printf("%d-%d-%d-%d-%d",time->tm_year+1900,time->tm_mon+1,time->tm_mday,time->tm_wday,time->tm_yday);
+        // printf("-%d-%d-%d\n",time->tm_hour,time->tm_min,time->tm_sec);
+        TimeRead_Flag = 0;
+      }
+      if(UpdateDay_Flag){
+        UpdateDateTask();
+        UpdateDay_Flag = 0;
+      }
+
+      tick += 10;
       
+      Key_ScanAll(tick, key_events);
+      
+      // // 处理按键事件
+      // for (i = 0; i < KEY_NUM; i++)
+      // {
+      //     if (key_events[i] == KEY_EVENT_SHORT_PRESS)
+      //     {
+      //         printf("Key %d short pressed!\r\n", i+1);
+      //     }
+      //     else if (key_events[i] == KEY_EVENT_LONG_PRESS)
+      //     {
+      //         printf("Key %d long pressed!\r\n", i+1);
+      //     }
+      // }
+      
+      // 也可以查询按键状态
+      if (Key_IsPressed(KEY_ID_1))
+      {
+        // printf("Key 1 pressed!\r\n");
+        PrevMonth();
+        DisplayTask();
+        Delay_ms(1000);
+        Delay_ms(1000);
+      }
+      if (Key_IsPressed(KEY_ID_2))
+      {
+        // printf("Key 2 pressed!\r\n");
+        GoToday();
+        GenerateCalendar(DateYear, DateMonth);
+        DisplayTask();
+        Delay_ms(1000);
+        Delay_ms(1000);
+      }
+      if (Key_IsPressed(KEY_ID_3))
+      {
+        // printf("Key 3 pressed!\r\n");
+        NextMonth();
+        DisplayTask();
+        Delay_ms(1000);
+        Delay_ms(1000);
+      }            
+      
+
     }
 }
 
@@ -279,7 +366,19 @@ void UpdateTimeTask(void){
 }
 
 void UpdateDateTask(void){
-
+  DateToday++;
+  if(DateToday == getMonthDays(DateYear, DateMonth) + 1){
+    DateToday = 1;
+    DateMonth++;
+    DateMonth %= 13;
+  }
+  if(DateMonth == 0){
+    DateMonth = 1;
+    DateYear++;
+  }
+  GenerateCalendar(DateYear, DateMonth);
+  InternalFlash_Test();
+  DisplayTask();
 }
 
 // 闰年判断
@@ -454,6 +553,21 @@ void InitCalendar(void) {
     GenerateCalendar(DateYear, DateMonth);
 }
 
+void SerialShowDate(void){
+  uint8_t i = 0;
+  uint8_t j = 0;  
+  printf("Year = %04d\r\n", DateYear);
+  printf("Month = %02d\r\n", DateMonth);
+  printf("DateToday = %02d\r\n", DateToday);
+  printf("Hour = %02d\r\n", DateHour);
+  printf("Min = %02d\r\n", DateMin);
+  printf("Sec = %02d\r\n", DateSec);    
+  for(i = 0;i < 6;i++){
+    for(j = 0;j < 7;j++) printf("%02d ", DateArrary[i][j]);
+    printf("\r\n");
+  }    
+}
+
 /**
 * @brief  InternalFlash_Test,对内部FLASH进行读写测试
 * @param  None
@@ -498,10 +612,11 @@ int InternalFlash_Test(void)
     for(j = 0;(j < 7) && (FLASHStatus == FLASH_COMPLETE);j++){
       tmp = (DateArrary[i][j] << 8) | (DateArrary[i][j] >> 8);
       FLASHStatus = FLASH_ProgramHalfWord(Address, tmp);
-      // printf("DateArrary[i][j] = %04X\r\n",DateArrary[i][j]);
-      // printf("tmp = %04X\r\n",tmp);
+      // printf(" = %04X\r\n",DateArrary[i][j]);
+      // printf("%04X ",tmp);
       Address = Address + 2;
     }
+    // printf("\r\n");
   }
 
   FLASH_Lock();
@@ -518,26 +633,129 @@ int InternalFlash_Test(void)
   return 0;
 }
 
+void GoToday(void){
+  uint32_t address = WRITE_START_ADDR;
+  DateYear = *(__IO uint16_t*) address;
+  address += 2;  
+  DateMonth = *(__IO uint8_t*) address++;
+  DateToday = *(__IO uint8_t*) address++;  
+}
+
 void ShowInternalFlashData(void){
   uint32_t address = WRITE_START_ADDR;
   uint8_t i = 0;
   uint8_t j = 0;
+  uint8_t tmp_hour = 0;
+  uint8_t tmp_min = 0;
+  uint8_t tmp_sec = 0;
 
+  DateYear = *(__IO uint16_t*) address;
   printf("Year = %04d\r\n", *(__IO uint16_t*) address);
   address += 2;
-  printf("Month = %02d\r\n", *(__IO uint8_t*) address++);
-  printf("Day = %02d\r\n", *(__IO uint8_t*) address++);
-  printf("Hour = %02d\r\n", *(__IO uint8_t*) address++);
-  printf("Min = %02d\r\n", *(__IO uint8_t*) address++);
-  printf("Sec = %02d\r\n", *(__IO uint8_t*) address++);
+  DateMonth = *(__IO uint8_t*) address++;
+  printf("Month = %02d\r\n", DateMonth);
+  DateToday = *(__IO uint8_t*) address++;
+  printf("Day = %02d\r\n", DateToday);
+  tmp_hour = *(__IO uint8_t*) address++;
+  printf("Hour = %02d\r\n", tmp_hour);
+  tmp_min = *(__IO uint8_t*) address++;
+  printf("Min = %02d\r\n", tmp_min);
+  tmp_sec = *(__IO uint8_t*) address++;
+  printf("Sec = %02d\r\n", tmp_sec);
+  RTC_SetTime(tmp_hour, tmp_min, tmp_sec);
+  address = address + 2;
   for(i = 0;i < 6;i++){
     for(j = 0;j < 7;j++){
-      printf("%02d ", *(__IO uint16_t*) address);
+      DateArrary[i][j] = *(__IO uint8_t*) address;
+      printf("%02d ", *(__IO uint8_t*) address);
       address = address + 2;
     }
     printf("\r\n");
   }  
 }
+
+void RTC_Init(void){
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP,ENABLE); // 使能PWR和BKP时钟
+	PWR_BackupAccessCmd(ENABLE);                            // 使能RTC和后备寄存器访问
+//	RCC_LSEConfig(RCC_LSE_ON);
+//	while(RCC_GetFlagStatus(RCC_FLAG_LSERDY) == RESET);
+//	
+//	RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
+	
+	RCC_LSICmd(ENABLE);                                     // 使能LSI时钟
+	
+	while(RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);     // 等待LSI时钟准备就绪
+	
+	RCC_RTCCLKConfig(RCC_RTCCLKSource_LSI);                 // 选择LSI作为RTC时钟源
+	
+	RCC_RTCCLKCmd(ENABLE);                                  // 使能RTC时钟
+	
+	RTC_WaitForSynchro();                                   // 等待RTC时钟同步
+	
+	RTC_WaitForLastTask();                                  // 等待上一次RTC操作完成
+	
+	RTC_ITConfig(RTC_IT_SEC,ENABLE);                        // 使能秒中断
+	
+	RTC_WaitForLastTask();                                  // 等待上一次RTC操作完成
+	
+	//RTC_SetPrescaler(32768-1);
+	RTC_SetPrescaler(40000-1);                              //设定RTC频率            
+	
+	RTC_WaitForLastTask();                                  // 等待上一次RTC操作完成
+	
+	NVIC_InitTypeDef NVIC_InitStructure;                    // 定义NVIC_InitTypeDef结构体
+	NVIC_InitStructure.NVIC_IRQChannel = RTC_IRQn;          // 选择RTC中断
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;   // 设置抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;      // 设置子优先级
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;         // 使能中断
+	
+	NVIC_Init(&NVIC_InitStructure);                         // 初始化NVIC_InitTypeDef结构体
+
+}
+
+
+void RTC_SetTime(uint8_t hour, uint8_t min, uint8_t sec)
+{
+  struct tm time_start;               // 定义一个时间结构体,该结构体内存储的时间格式为正常时间
+  time_start.tm_year = 70;    // 设置年,这个年指的是当前年数减1900的得到数字，范围为0-128
+  time_start.tm_mon = 0;      // 设置月,这个月指的是当前月数减1得到的数字，范围为0-12，因为Unix时间是从1月开始算的
+  time_start.tm_mday = 1;    // 设置日
+  time_start.tm_hour = hour;    // 设置小时
+  time_start.tm_min = min;      // 设置分钟
+  time_start.tm_sec = sec;      // 设置秒数
+  // printf("Set Unxi = %d\r\n", mktime(&time_start));
+	RTC_SetCounter(mktime(&time_start));       // 设置RTC计数器
+	RTC_WaitForLastTask();      // 等待上一次RTC操作完成
+}
+
+
+void RTC_GetTime(void)                  // 获取RTC时间
+{
+	struct tm *time;                // 定义一个时间结构体
+	time_t time_temp = RTC_GetCounter();   // 获取RTC计数器
+	time = localtime(&time_temp);   // 将Unix时间戳转换为时间结构体
+  DateHour = time->tm_hour;
+  DateMin = time->tm_min;
+  DateSec = time->tm_sec;
+  // printf("unix:%d\n",time_temp);
+	// printf("%d-%d-%d-%d-%d",time->tm_year+1900,time->tm_mon+1,time->tm_mday,time->tm_wday,time->tm_yday);
+	// printf("-%d-%d-%d\n",time->tm_hour,time->tm_min,time->tm_sec);
+}
+
+void RTC_IRQHandler()                           // RTC中断处理函数
+{
+	if(RTC_GetITStatus(RTC_IT_SEC) != RESET)    // 判断是否是秒中断
+	{
+		TimeRead_Flag = 1;                      // 设置读秒标志位
+    RTC_GetTime();
+    if(DateHour == 23 && DateMin == 59 && DateSec == 59) UpdateDay_Flag = 1;;
+		RTC_ClearITPendingBit(RTC_IT_SEC);      // 清除秒中断标志位
+		RTC_WaitForLastTask();                  // 等待最后一个任务结束
+	}
+}
+
+
+
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
