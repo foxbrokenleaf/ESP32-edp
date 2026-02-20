@@ -239,6 +239,38 @@ int main(void)
         EPD_Update();
         RxDat = 0x00;
         break;
+      case 0x10:
+        DateYear++;
+        RxDat = 0x00;
+        break;
+      case 0x11:
+        DateToday--;
+        RxDat = 0x00;
+        break;
+      case 0x12:
+        RTC_SetTime(++DateHour, DateMin, DateSec);
+        RxDat = 0x00;
+        break;
+      case 0x13:
+        RTC_SetTime(--DateHour, DateMin, DateSec);
+        RxDat = 0x00;
+        break;
+      case 0x14:
+        RTC_SetTime(DateHour, ++DateMin, DateSec);
+        RxDat = 0x00;
+        break;   
+      case 0x15:
+        RTC_SetTime(DateHour, --DateMin, DateSec);
+        RxDat = 0x00;
+        break;
+      case 0x16:
+        RTC_SetTime(DateHour, DateMin, ++DateSec);
+        RxDat = 0x00;
+        break;   
+      case 0x17:
+        RTC_SetTime(DateHour, DateMin, --DateSec);
+        RxDat = 0x00;
+        break;                                                           
       case 0xFF:
         DisplayTask();
         RxDat = 0x00;
