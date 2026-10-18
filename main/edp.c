@@ -21,7 +21,7 @@
 #define DELAY_MS(ms)               vTaskDelay(pdMS_TO_TICKS(ms))
 
 /* ==================== 显存 ==================== */
-uint8_t edp_buff[EDP_BUF_H][EDP_BUF_W];
+uint8_t edp_buff[EDP_BUF_H][EDP_BUF_W];   /* [152][37] */
 
 /* ==================== 底层引脚操作 ==================== */
 static inline void RST_Write(uint8_t s) { PIN_WRITE(EDP_PIN_RST, s ? 1 : 0); }
@@ -175,13 +175,16 @@ static void set_pixel_buffer(int x, int y, bool color)
 {
     uint8_t mask;
     if (x < 0 || x >= EDP_WIDTH || y < 0 || y >= EDP_HEIGHT) return;
+
+    /* 面板 Y 轴与逻辑坐标相反：翻转 Y */
+    y = EDP_HEIGHT - 1 - y;
+
     mask = 0x80 >> (x & 0x07);
 
-    /* 面板极性：1 = 黑，0 = 白。API 约定 color=true 表示白，故这里取反 */
     if (color)
-        edp_buff[y][x >> 3] &= (uint8_t)~mask;   /* 白 → 写 0 */
+        edp_buff[y][x >> 3] &= (uint8_t)~mask;
     else
-        edp_buff[y][x >> 3] |= mask;              /* 黑 → 写 1 */
+        edp_buff[y][x >> 3] |= mask;
 }
 
 /* ==================== 画点 ==================== */
@@ -264,10 +267,12 @@ void edp_draw_string(int x, int y, const char *str, uint8_t size, bool invert)
             bits = edp_font[idx][col];
             for (row = 0; row < ROWS; row++) {
                 on = (bits >> row) & 0x01;
-                color = invert ? (on ? false : true) : on;
+                int eff_col = col;
+
+                color = invert ? !on : on;
                 for (sx = 0; sx < size; sx++)
                     for (sy = 0; sy < size; sy++)
-                        set_pixel_buffer(cursorX + col * size + sx,
+                        set_pixel_buffer(cursorX + eff_col * size + sx,
                                          y + row * size + sy,
                                          color);
             }

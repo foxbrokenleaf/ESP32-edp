@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-18 22:13:33
+ * @LastEditTime: 2026-10-18 23:29:11
  * @FilePath: \epd\main\main.c
  * @Description: 主程序
  */
@@ -25,8 +25,7 @@ void app_main(void)
     /* 四角标记 */
     edp_fill_rect(0,   0,   10, 10, false);       /* 左上 */
     edp_fill_rect(142, 0,   10, 10, false);       /* 右上 */
-    edp_fill_rect(0,   286, 10, 10, false);       /* 左下 */
-    edp_fill_rect(142, 286, 10, 10, false);       /* 右下 */
+
 
     /* 中线 */
     edp_draw_line(76, 0, 76, 295, false);         /* 竖直 */
