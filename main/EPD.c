@@ -344,11 +344,12 @@ void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 }
 
 /* ==================== 字符显示 ==================== */
-void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
+void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i, j, temp, pos;
     int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
+    uint8_t pixel;          /* 最终要写入的位：1=黑，0=白（面板极性） */
 
     if (FontSize == EPD_8X16) {
         pos = Char - ' ';
@@ -360,10 +361,18 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
                     if (EPD_IsInPhysicalRange(physX, physY)) {
                         byteIndex = physX / 8;
                         bitIndex = 7 - (physX % 8);
-                        if (temp & (0x80 >> j))
-                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+
+                        /* 字模 bit=1 表示字亮点 */
+                        pixel = (temp & (0x80 >> j)) ? 1 : 0;
+
+                        /* 反色：字亮点→白(0)，背景→黑(1) */
+                        if (Inverted) pixel = !pixel;
+
+                        /* 面板极性：1=黑，0=白 */
+                        if (pixel)
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* 写 0 = 白 */
                         else
-                            EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* 写 1 = 黑 */
                     }
                 }
             }
@@ -378,10 +387,14 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
                     if (EPD_IsInPhysicalRange(physX, physY)) {
                         byteIndex = physX / 8;
                         bitIndex = 7 - (physX % 8);
-                        if (temp & (1 << i))
+
+                        pixel = (temp & (1 << i)) ? 1 : 0;
+                        if (Inverted) pixel = !pixel;
+
+                        if (pixel)
                             EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
                         else
-                            EPD_DisplayBuf[physY][byteIndex] |= (0x01 << bitIndex);
+                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);
                     }
                 }
             }
@@ -389,63 +402,63 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize)
     }
 }
 
-void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize)
+void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize, uint8_t Inverted)
 {
     uint16_t XOffset = 0;
     while (*String != '\0') {
-        EPD_ShowChar(X + XOffset, Y, *String, FontSize);
+        EPD_ShowChar(X + XOffset, Y, *String, FontSize, Inverted);
         XOffset += FontSize;
         String++;
     }
 }
 
-void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
+void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i;
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize);
+        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
 }
 
-void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uint8_t FontSize)
+void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i;
     uint32_t Number1;
-    if (Number >= 0) { EPD_ShowChar(X, Y, '+', FontSize); Number1 = Number; }
-    else             { EPD_ShowChar(X, Y, '-', FontSize); Number1 = -Number; }
+    if (Number >= 0) { EPD_ShowChar(X, Y, '+', FontSize, Inverted); Number1 = Number; }
+    else             { EPD_ShowChar(X, Y, '-', FontSize, Inverted); Number1 = -Number; }
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + (i + 1) * FontSize, Y, Number1 / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize);
+        EPD_ShowChar(X + (i + 1) * FontSize, Y, Number1 / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
 }
 
-void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
+void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i, SingleNumber;
     for (i = 0; i < Length; i++) {
         SingleNumber = Number / EPD_Pow(16, Length - i - 1) % 16;
-        if (SingleNumber < 10) EPD_ShowChar(X + i * FontSize, Y, SingleNumber + '0', FontSize);
-        else                   EPD_ShowChar(X + i * FontSize, Y, SingleNumber - 10 + 'A', FontSize);
+        if (SingleNumber < 10) EPD_ShowChar(X + i * FontSize, Y, SingleNumber + '0', FontSize, Inverted);
+        else                   EPD_ShowChar(X + i * FontSize, Y, SingleNumber - 10 + 'A', FontSize, Inverted);
     }
 }
 
-void EPD_ShowBinNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize)
+void EPD_ShowBinNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i;
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(2, Length - i - 1) % 2 + '0', FontSize);
+        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(2, Length - i - 1) % 2 + '0', FontSize, Inverted);
 }
 
-void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, uint8_t FraLength, uint8_t FontSize)
+void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, uint8_t FraLength, uint8_t FontSize, uint8_t Inverted)
 {
     uint32_t PowNum, IntNum, FraNum;
-    if (Number >= 0) EPD_ShowChar(X, Y, '+', FontSize);
-    else             { EPD_ShowChar(X, Y, '-', FontSize); Number = -Number; }
+    if (Number >= 0) EPD_ShowChar(X, Y, '+', FontSize, Inverted);
+    else             { EPD_ShowChar(X, Y, '-', FontSize, Inverted); Number = -Number; }
     IntNum = Number;
     Number -= IntNum;
     PowNum = EPD_Pow(10, FraLength);
     FraNum = round(Number * PowNum);
     IntNum += FraNum / PowNum;
-    EPD_ShowNum(X + FontSize, Y, IntNum, IntLength, FontSize);
-    EPD_ShowChar(X + (IntLength + 1) * FontSize, Y, '.', FontSize);
-    EPD_ShowNum(X + (IntLength + 2) * FontSize, Y, FraNum, FraLength, FontSize);
+    EPD_ShowNum(X + FontSize, Y, IntNum, IntLength, FontSize, Inverted);
+    EPD_ShowChar(X + (IntLength + 1) * FontSize, Y, '.', FontSize, Inverted);
+    EPD_ShowNum(X + (IntLength + 2) * FontSize, Y, FraNum, FraLength, FontSize, Inverted);
 }
 
 void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const uint8_t *Image)
@@ -486,14 +499,14 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
     }
 }
 
-void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, char *format, ...)
+void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, uint8_t Inverted, char *format, ...)
 {
     char String[256];
     va_list arg;
     va_start(arg, format);
     vsprintf(String, format, arg);
     va_end(arg);
-    EPD_ShowString(X, Y, String, FontSize);
+    EPD_ShowString(X, Y, String, FontSize, Inverted);
 }
 
 /* ==================== 画点 ==================== */
@@ -801,11 +814,13 @@ void EPD_TestPattern(void)
     for (i = 0; i < EPD_WIDTH; i++)  EPD_DrawPoint(i, EPD_HEIGHT / 2);
     for (i = 0; i < EPD_HEIGHT; i++) EPD_DrawPoint(EPD_WIDTH / 2, i);
 
-    EPD_ShowString(10, 10, "TL", EPD_8X16);
-    EPD_ShowString(EPD_WIDTH - 40, 10, "TR", EPD_8X16);
-    EPD_ShowString(10, EPD_HEIGHT - 30, "BL", EPD_8X16);
-    EPD_ShowString(EPD_WIDTH - 40, EPD_HEIGHT - 30, "BR", EPD_8X16);
-    EPD_ShowString(EPD_WIDTH / 2 - 40, EPD_HEIGHT / 2 - 8, "TEST", EPD_8X16);
+    EPD_ShowString(10, 10, "TL", EPD_8X16, 1);
+    EPD_ShowString(EPD_WIDTH - 40, 10, "TR", EPD_8X16, 0);
+    EPD_ShowString(10, EPD_HEIGHT - 30, "BL", EPD_8X16, 1);
+    EPD_ShowString(EPD_WIDTH - 40, EPD_HEIGHT - 30, "BR", EPD_8X16, 0);
+    
+    EPD_DrawRectangle(EPD_WIDTH / 2 - 80, EPD_HEIGHT / 2 - 16, EPD_WIDTH / 2 + 40, EPD_HEIGHT / 2 + 8, 1);
+    EPD_ShowString(EPD_WIDTH / 2 - 40, EPD_HEIGHT / 2 - 8, "TEST", EPD_8X16, 1);
 
     EPD_Update();
 }
