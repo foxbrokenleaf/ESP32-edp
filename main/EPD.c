@@ -10,7 +10,7 @@
 #include "freertos/task.h"
 #include "esp_rom_sys.h"
 
-/* ==================== ���Ŷ��壨��ʵ�ʽ����޸ģ� ==================== */
+/* ==================== 引脚定义（按实际接线修改） ==================== */
 #define EPD_BUSY_PIN    4
 #define EPD_RST_PIN     13
 #define EPD_DC_PIN      14
@@ -18,7 +18,7 @@
 #define EPD_SCL_PIN     26
 #define EPD_SDA_PIN     25
 
-/* ==================== ���Ų����꣨ESP-IDF�� ==================== */
+/* ==================== 引脚操作宏（ESP-IDF） ==================== */
 #define EPD_BUSY_READ()      gpio_get_level(EPD_BUSY_PIN)
 #define EPD_RST_HIGH()       gpio_set_level(EPD_RST_PIN, 1)
 #define EPD_RST_LOW()        gpio_set_level(EPD_RST_PIN, 0)
@@ -31,10 +31,10 @@
 #define EPD_SDA_HIGH()       gpio_set_level(EPD_SDA_PIN, 1)
 #define EPD_SDA_LOW()        gpio_set_level(EPD_SDA_PIN, 0)
 
-/* ==================== �Դ棨�������֣�[296][19]�� ==================== */
+/* ==================== 显存（物理布局，[296][19]） ==================== */
 static uint8_t EPD_DisplayBuf[EPD_PHYSICAL_HEIGHT][EPD_PHYSICAL_COLUMN_BYTES];
 
-/* ==================== ��ʱ��ESP-IDF�� ==================== */
+/* ==================== 延时（ESP-IDF） ==================== */
 static void delay_ms(uint32_t ms)
 {
     vTaskDelay(pdMS_TO_TICKS(ms));
@@ -45,7 +45,7 @@ static void delay_us(uint32_t us)
     esp_rom_delay_us(us);
 }
 
-/* ==================== ��ѧ���� ==================== */
+/* ==================== 数学工具 ==================== */
 static uint32_t EPD_Pow(uint32_t X, uint32_t Y)
 {
     uint32_t Result = 1;
@@ -76,7 +76,7 @@ static uint8_t EPD_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t E
     return 0;
 }
 
-/* ==================== ����任���߼� �� ������ ==================== */
+/* ==================== 坐标变换（逻辑 → 物理） ==================== */
 static void EPD_LogicToPhys(int16_t logicX, int16_t logicY, int16_t *physX, int16_t *physY)
 {
 #if (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT)
@@ -88,10 +88,10 @@ static void EPD_LogicToPhys(int16_t logicX, int16_t logicY, int16_t *physX, int1
     *physY = EPD_PHYSICAL_HEIGHT - 1 - logicY;
 
 #elif (EPD_ORIENTATION == EPD_ORIENTATION_LANDSCAPE)
-    /* ������˳ʱ����ת 90 ��
-     * �߼��� 296���� 152�������� 152���� 296
-     * �߼� X(0-295) �� ���� Y(0-295)
-     * �߼� Y(0-151) �� ���� X(0-151)������
+    /* 横屏：顺时针旋转 90 度
+     * 逻辑宽 296、高 152；物理宽 152、高 296
+     * 逻辑 X(0-295) → 物理 Y(0-295)
+     * 逻辑 Y(0-151) → 物理 X(0-151)（反向）
      */
     *physX = logicY;
     *physY = EPD_PHYSICAL_HEIGHT - 1 - logicX;
@@ -116,13 +116,13 @@ static uint8_t EPD_IsInPhysicalRange(int16_t X, int16_t Y)
     return (X >= 0 && X < EPD_PHYSICAL_WIDTH && Y >= 0 && Y < EPD_PHYSICAL_HEIGHT) ? 1 : 0;
 }
 
-/* ==================== ���� SPI ==================== */
+/* ==================== 软件 SPI ==================== */
 static void EPD_W_SCL(uint8_t BitValue) { BitValue ? EPD_SCL_HIGH() : EPD_SCL_LOW(); }
 static void EPD_W_SDA(uint8_t BitValue) { BitValue ? EPD_SDA_HIGH() : EPD_SDA_LOW(); }
 
 static void EPD_GPIO_Init(void)
 {
-    /* BUSY ���루������ˣ�δ�������ﲻӰ�죬BUSY_Wait �ù̶���ʱ�� */
+    /* BUSY 输入（如果接了；未接则这里不影响，BUSY_Wait 用固定延时） */
     gpio_config_t io_in = {
         .pin_bit_mask = (1ULL << EPD_BUSY_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -132,7 +132,7 @@ static void EPD_GPIO_Init(void)
     };
     gpio_config(&io_in);
 
-    /* ������� */
+    /* 输出引脚 */
     gpio_config_t io_out = {
         .pin_bit_mask = (1ULL << EPD_RST_PIN) | (1ULL << EPD_DC_PIN) |
                         (1ULL << EPD_CS_PIN)  | (1ULL << EPD_SCL_PIN) |
@@ -184,15 +184,15 @@ void EPD_WriteData(uint8_t Data)
 
 void EPD_BUSY_Wait(void)
 {
-    /* ��� BUSY ���� MCU�����������У��ߵ�ƽΪæ���ȱ�ͣ���
+    /* 如果 BUSY 接了 MCU，用下面这行（高电平为忙，等变低）：
      * while (EPD_BUSY_READ() != 0) delay_ms(10);
      *
-     * ���Ӳ�� BUSY δ�� MCU���ù̶���ʱ��
+     * 你的硬件 BUSY 未接 MCU，用固定延时。
      */
     delay_ms(2000);
 }
 
-/* ==================== Ӳ����λ ==================== */
+/* ==================== 硬件复位 ==================== */
 static void EPD_COG_Reset(void)
 {
     delay_ms(5);
@@ -206,7 +206,7 @@ static void EPD_COG_Reset(void)
     delay_ms(5);
 }
 
-/* ==================== ��ʼ�� ==================== */
+/* ==================== 初始化 ==================== */
 void EPD_Init(void)
 {
     EPD_GPIO_Init();
@@ -256,7 +256,7 @@ void EPD_Init(void)
     EPD_Clear();
 }
 
-/* ==================== ˢ�£�д SRAM + �ϵ� + ˢ�� + �ϵ磩 ==================== */
+/* ==================== 刷新（写 SRAM + 上电 + 刷新 + 断电） ==================== */
 void EPD_Update(void)
 {
     uint16_t i, j;
@@ -285,10 +285,10 @@ void EPD_Update(void)
 
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
-    EPD_Update();  /* �򻯣�����ˢ��Ҳȫ��ˢ */
+    EPD_Update();  /* 简化：区域刷新也全屏刷 */
 }
 
-/* ==================== ���� ==================== */
+/* ==================== 清屏 ==================== */
 void EPD_Clear(void)
 {
     uint16_t i, j;
@@ -343,13 +343,13 @@ void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
     }
 }
 
-/* ==================== �ַ���ʾ ==================== */
+/* ==================== 字符显示 ==================== */
 void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i, j, temp, pos;
     int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
-    uint8_t pixel;          /* ����Ҫд���λ��1=�ڣ�0=�ף���弫�ԣ� */
+    uint8_t pixel;          /* 最终要写入的位：1=黑，0=白（面板极性） */
 
     if (FontSize == EPD_8X16) {
         pos = Char - ' ';
@@ -362,17 +362,17 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inv
                         byteIndex = physX / 8;
                         bitIndex = 7 - (physX % 8);
 
-                        /* ��ģ bit=1 ��ʾ������ */
+                        /* 字模 bit=1 表示字亮点 */
                         pixel = (temp & (0x80 >> j)) ? 1 : 0;
 
-                        /* ��ɫ�����������(0)����������(1) */
+                        /* 反色：字亮点→白(0)，背景→黑(1) */
                         if (Inverted) pixel = !pixel;
 
-                        /* ��弫�ԣ�1=�ڣ�0=�� */
+                        /* 面板极性：1=黑，0=白 */
                         if (pixel)
-                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* д 0 = �� */
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* 写 0 = 白 */
                         else
-                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* д 1 = �� */
+                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* 写 1 = 黑 */
                     }
                 }
             }
@@ -400,6 +400,79 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inv
             }
         }
     }
+}
+
+/*
+ * 显示汉字
+ * X, Y      : 逻辑坐标（左上角起点）
+ * pFontData : 字模数据指针
+ *             - 16x16: 32 字节，逐行，每行 2 字节，高位在前
+ *             - 32x32: 128 字节，逐行，每行 4 字节，高位在前
+ * FontSize  : EPD_16X16 或 EPD_32X32
+ * Inverted  : 0=正常，1=反色
+ */
+void EPD_ShowChineseChar(int16_t X, int16_t Y, const uint8_t *pFontData, uint8_t FontSize, uint8_t Inverted)
+{
+    uint8_t  byteIndex, bitIndex;
+    uint8_t  pixel;                 /* 1=黑，0=白（面板极性） */
+    int16_t  physX, physY;
+    uint16_t row, col;
+    uint16_t width, height;
+    uint16_t bytesPerRow;           /* 每行占用的字节数 */
+    uint8_t  temp;
+
+    if (pFontData == NULL) return;
+
+    switch (FontSize) {
+        case EPD_16X16:
+            width      = 16;
+            height     = 16;
+            bytesPerRow = 2;
+            break;
+        case EPD_32X32:
+            width      = 32;
+            height     = 32;
+            bytesPerRow = 4;
+            break;
+        default:
+            return;
+    }
+
+    for (row = 0; row < height; row++) {
+        for (col = 0; col < width; col++) {
+            /* 取出该像素对应的字模字节 */
+            temp = pFontData[row * bytesPerRow + (col >> 3)];
+
+            /* 字模 bit=1 表示字亮点（高位在前） */
+            pixel = (temp & (0x80 >> (col & 0x07))) ? 1 : 0;
+
+            /* 反色：字亮点→白(0)，背景→黑(1) */
+            if (Inverted) pixel = !pixel;
+
+            /* 逻辑坐标 → 物理坐标 */
+            if (!EPD_IsInLogicRange(X + col, Y + row)) continue;
+            EPD_LogicToPhys(X + col, Y + row, &physX, &physY);
+            if (!EPD_IsInPhysicalRange(physX, physY)) continue;
+
+            byteIndex = physX / 8;
+            bitIndex  = 7 - (physX % 8);
+
+            /* 面板极性：1=黑，0=白 */
+            if (pixel)
+                EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* 写 0 = 白 */
+            else
+                EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* 写 1 = 黑 */
+        }
+    }
+}
+
+const uint8_t *EPD_FindChinese(uint16_t code, uint8_t FontSize, const EPD_ChineseFont *table, uint16_t count)
+{
+    for (uint16_t k = 0; k < count; k++) {
+        if (table[k].Code == code)
+            return table[k].pData;
+    }
+    return NULL;
 }
 
 void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize, uint8_t Inverted)
@@ -468,7 +541,7 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
     uint8_t byteIndex, bitIndex, pixel;
     uint16_t bytesPerLine = (Width + 7) / 8;
 
-    /* ���̰׵� */
+    /* 先铺白底 */
     for (j = 0; j < Height; j++) {
         for (i = 0; i < Width; i++) {
             if (EPD_IsInLogicRange(X + i, Y + j)) {
@@ -482,7 +555,7 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
         }
     }
 
-    /* ��ͼ */
+    /* 画图 */
     for (j = 0; j < Height; j++) {
         for (i = 0; i < Width; i++) {
             if (EPD_IsInLogicRange(X + i, Y + j)) {
@@ -509,7 +582,7 @@ void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, uint8_t Inverted, char *
     EPD_ShowString(X, Y, String, FontSize, Inverted);
 }
 
-/* ==================== ���� ==================== */
+/* ==================== 画点 ==================== */
 void EPD_DrawPoint(int16_t X, int16_t Y)
 {
     int16_t physX, physY;
@@ -556,7 +629,7 @@ uint8_t EPD_GetPoint(int16_t X, int16_t Y)
     return 0;
 }
 
-/* ==================== ���� ==================== */
+/* ==================== 画线 ==================== */
 void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
 {
     int16_t x, y, dx, dy, d, incrE, incrNE, temp;
@@ -664,7 +737,7 @@ void EPD_DrawDashedLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
     }
 }
 
-/* ==================== ���� / ������ / Բ / �� ==================== */
+/* ==================== 矩形 / 三角形 / 圆 / 弧 ==================== */
 void EPD_DrawRectangle(int16_t X, int16_t Y, uint16_t Width, uint16_t Height, uint8_t IsFilled)
 {
     int16_t i, j;
@@ -793,7 +866,7 @@ void EPD_DrawArc(int16_t X, int16_t Y, uint8_t Radius, int16_t StartAngle, int16
     }
 }
 
-/* ==================== ����ͼ ==================== */
+/* ==================== 测试图 ==================== */
 void EPD_TestPattern(void)
 {
     uint16_t i;

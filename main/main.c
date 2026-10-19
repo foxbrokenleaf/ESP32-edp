@@ -12,18 +12,16 @@
 #include "esp_log.h"
 
 #include "EPD.h"
+#include "GUI.h"
 
 static const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "EPD demo start");
 
     EPD_Init();                          /* 初始化并清屏 */
 
-    EPD_TestPattern();                   /* 内置测试图：边框+对角线+十字+四角文字 */
-
-    ESP_LOGI(TAG, "EPD demo done");
+    CourseGUI();
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));

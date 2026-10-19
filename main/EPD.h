@@ -32,6 +32,8 @@
 /* 字体大小 *********************/
 #define EPD_8X16                8       /* 宽 8 像素，高 16 像素 */
 #define EPD_6X8                 6       /* 宽 6 像素，高 8 像素 */
+#define EPD_16X16               16
+#define EPD_32X32               32
 
 /* 填充模式 *********************/
 #define EPD_UNFILLED            0
@@ -54,6 +56,12 @@
 #define EPD_CMD_DISPLAY_REFRESH         0x12
 #define EPD_CMD_SOFT_RESET              0x00
 
+/* 汉字点阵数据结构：每个汉字 32 字节（16x16）或 128 字节（32x32） */
+typedef struct {
+    const uint8_t *pData;   /* 字模数据指针 */
+    uint16_t       Code;    /* 编码（如 GB2312 内码 或 Unicode） */
+} EPD_ChineseFont;
+
 /* 公开函数 *********************/
 void EPD_Init(void);
 void EPD_Update(void);
@@ -63,6 +71,7 @@ void EPD_ClearArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height);
 void EPD_Reverse(void);
 void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height);
 void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inverted);
+void EPD_ShowChineseChar(int16_t X, int16_t Y, const uint8_t *pFontData, uint8_t FontSize, uint8_t Inverted);
 void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize, uint8_t Inverted);
 void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted);
 void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted);
