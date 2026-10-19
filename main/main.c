@@ -11,33 +11,19 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "edp.h"
+#include "EPD.h"
 
 static const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "EDP demo start");
+    ESP_LOGI(TAG, "EPD demo start");
 
-    edp_init();
-    edp_clear();                                  /* 全白 */
+    EPD_Init();                          /* 初始化并清屏 */
 
-    /* 四角标记 */
-    edp_fill_rect(0,   0,   10, 10, false);       /* 左上 */
-    edp_fill_rect(142, 0,   10, 10, false);       /* 右上 */
+    EPD_TestPattern();                   /* 内置测试图：边框+对角线+十字+四角文字 */
 
-
-    /* 中线 */
-    edp_draw_line(76, 0, 76, 295, false);         /* 竖直 */
-    edp_draw_line(0, 148, 151, 148, false);       /* 水平 */
-
-    /* 字符串：白底黑字 */
-    edp_draw_string(10, 20, "Hello EDP 123", 1, true);
-    edp_draw_string(10, 50, "TEST", 2, true);
-
-    edp_refresh();
-
-    ESP_LOGI(TAG, "EDP demo done");
+    ESP_LOGI(TAG, "EPD demo done");
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
