@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-21 23:39:42
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-21 23:40:05
+ * @LastEditTime: 2026-10-22 18:22:53
  * @FilePath: \epd\main\bsp_http.h
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -16,6 +16,7 @@
 #include <sys/param.h>
 #include "esp_netif.h"
 #include "esp_eth.h"
+#include "esp_wifi.h"
 
 #include <esp_https_server.h>
 #include "esp_tls.h"

@@ -54,6 +54,9 @@ esp_err_t rtc_save_current_tm_to_nvs(void);
 esp_err_t rtc_save_timezone_to_nvs(const char *tz);
 esp_err_t rtc_restore_timezone_from_nvs(void);
 
+/* ========================= SNTP ½Ó¿Ú ========================= */
+void bsp_sntp_init(void);
+
 #ifdef __cplusplus
 }
 #endif

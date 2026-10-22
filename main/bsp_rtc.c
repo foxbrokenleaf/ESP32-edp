@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-09-21 23:42:40
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-21 23:35:15
+ * @LastEditTime: 2026-10-22 21:55:17
  * @FilePath: \RMS5000-BlackBoxByESP32\main\bsp_rtc.c
  * @Description: RTCÄ£¿é
  * 
@@ -641,4 +641,8 @@ static esp_err_t rtc_nvs_load_timezone(char *tz, size_t len)
     }
 
     return ret;
+}
+
+void bsp_sntp_init(void){
+    
 }

@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-20 23:57:22
+ * @LastEditTime: 2026-10-22 21:43:39
  * @FilePath: \epd\main\main.c
  * @Description: 主程序
  */
@@ -17,6 +17,7 @@
 #include "EPD.h"
 #include "GUI.h"
 #include "bsp_rtc.h"
+#include "bsp_http.h"
 
 
 static const char *TAG = "MAIN";
@@ -30,6 +31,7 @@ void app_main(void)
     rtc_print_task_start();
 
     WiFi_Init();
+    Https_Init();
 
     EPD_Init();                          /* 初始化并清屏 */
 

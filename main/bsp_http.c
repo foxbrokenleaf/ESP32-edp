@@ -2,13 +2,14 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-21 23:39:37
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-21 23:49:33
+ * @LastEditTime: 2026-10-22 21:52:32
  * @FilePath: \epd\main\bsp_http.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #include "bsp_http.h"
 
-const char *TAG = "BSP_HTTP";
+static const char *TAG = "BSP_HTTP";
+httpd_handle_t server;
 
 /***********************************************************************
  *@author                       foxbrokenleaf 
@@ -25,12 +26,6 @@ const char *TAG = "BSP_HTTP";
  *************************************************************************/
 static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
-    // if (event_base == ESP_HTTPS_SERVER_EVENT) {
-    //     if (event_id == HTTPS_SERVER_EVENT_ERROR) {
-    //         esp_https_server_last_error_t *last_error = (esp_tls_last_error_t *) event_data;
-    //         ESP_LOGE(TAG, "Error event triggered: last_error = %s, last_tls_err = %d, tls_flag = %d", esp_err_to_name(last_error->last_error), last_error->esp_tls_error_code, last_error->esp_tls_flags);
-    //     }
-    // }
     if (event_base == ESP_HTTP_SERVER_EVENT) {
         if (event_id == HTTP_SERVER_EVENT_ERROR) {
             esp_https_server_last_error_t *last_error = (esp_tls_last_error_t *) event_data;
@@ -54,8 +49,10 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
  *************************************************************************/
 void Https_Init(void)
 {
-    
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_START, &connect_handler, &server));
     ESP_ERROR_CHECK(esp_event_handler_register(ESP_HTTPS_SERVER_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
+
 
 }
 
@@ -87,7 +84,7 @@ static httpd_handle_t start_webserver(void)
 
     // Set URI handlers
     ESP_LOGI(TAG, "Registering URI handlers");
-    // httpd_register_uri_handler(server, &XXXXXXXXX);  //文件浏览器
+    // httpd_register_uri_handler(server, &XXXXXXXXX);
 
 
     return server;
