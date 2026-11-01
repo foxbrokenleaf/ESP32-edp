@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-01 00:00:00
+ * @LastEditTime: 2026-11-01 20:49:31
  * @FilePath: \epd\main\main.c
  * @Description: 应用程序入口
  */
@@ -20,7 +20,6 @@
 #include "bsp_http.h"
 #include "GT30L32S4W.h"
 
-
 static const char *TAG = "MAIN";
 
 /**
@@ -30,9 +29,6 @@ static const char *TAG = "MAIN";
  */
 static void GT30L32S4W_Demo(void)
 {
-    uint8_t  glyph[GT30L32S4W_GLYPH_MAX_BYTES] = {0};
-    uint16_t advance = 0;
-
     esp_err_t err = GT30L32S4W_Init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "GT30L32S4W init failed: %s", esp_err_to_name(err));
@@ -45,23 +41,6 @@ static void GT30L32S4W_Demo(void)
         return;
     }
 
-    /* ASCII 'A'（8x16） */
-    if (GT30L32S4W_ReadAscii(GT30L32S4W_FONT_ASCII_8X16, 'A',
-                             glyph, sizeof(glyph), &advance) == ESP_OK) {
-        ESP_LOGI(TAG, "ASCII 'A' 8x16 (advance=%u): %02X %02X %02X %02X %02X %02X %02X %02X ...",
-                 advance, glyph[0], glyph[1], glyph[2], glyph[3],
-                 glyph[4], glyph[5], glyph[6], glyph[7]);
-    }
-
-    /* GB2312 "啊" = 0xB0A1（16x16） */
-    if (GT30L32S4W_ReadGb2312(GT30L32S4W_FONT_GB2312_16X16, 0xB0A1,
-                              glyph, sizeof(glyph)) == ESP_OK) {
-        ESP_LOGI(TAG, "GB2312 0xB0A1 16x16: %02X %02X %02X %02X %02X %02X %02X %02X ...",
-                 glyph[0], glyph[1], glyph[2], glyph[3],
-                 glyph[4], glyph[5], glyph[6], glyph[7]);
-    }
-
-    /* 演示页：验证 取字模 -> EPD 显示 整条链路 */
     EPD_Clear();
     /* 24x24：ASCII + 汉字混排（"你好 GT30L32S4W"） */
     GT30L32S4W_ShowString(4, 4, "\xC4\xE3\xBA\xC3 GT30L32S4W",
@@ -88,22 +67,46 @@ static void GT30L32S4W_Demo(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
 }
 
+/**
+ * @brief 初始化 NVS：兼容"分区写满/版本升级"导致的启动死循环
+ */
+static void App_NvsInit(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "nvs: %s, erase and re-init", esp_err_to_name(err));
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs init: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "nvs ok");
+    }
+}
+
 void app_main(void)
 {
+    App_NvsInit();
 
-    nvs_flash_init();
-
+    ESP_LOGI(TAG, "rtc init");
     bsp_rtc_init();
     rtc_print_task_start();
 
+    /* 先刷屏、再联网络：墨水屏刷新电流较大，避免和 WiFi 发射抢电源 */
+    ESP_LOGI(TAG, "epd init");
+    EPD_Init();
+
+    GT30L32S4W_Demo();                   /* 字库芯片验证页（约 6 s 一次全屏刷新） */
+
+    ESP_LOGI(TAG, "draw course gui");
+    // CourseGUI();                         /* 画课程表并刷新（全屏约 6 s） */
+    ESP_LOGI(TAG, "course gui refreshed");
+
+    ESP_LOGI(TAG, "wifi init");
     WiFi_Init();
     Https_Init();
-
-    EPD_Init();                          /* 初始化显示屏 */
-
-    GT30L32S4W_Demo();                   /* 字库芯片验证页，验证后可删除 */
-
-    CourseGUI();
+    ESP_LOGI(TAG, "net init done");
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
