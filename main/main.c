@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-01 21:31:38
+ * @LastEditTime: 2026-11-02 00:27:12
  * @FilePath: \epd\main\main.c
  * @Description: 应用程序入口
  */
@@ -59,14 +59,19 @@ void app_main(void)
         return;
     } 
 
-    ESP_LOGI(TAG, "draw course gui");
-    CourseGUI();                         /* 画课程表并刷新（全屏约 6 s） */
-    ESP_LOGI(TAG, "course gui refreshed");
+
 
     ESP_LOGI(TAG, "wifi init");
     WiFi_Init();
     Https_Init();
     ESP_LOGI(TAG, "net init done");
+
+    /* 顺序说明：目前"先刷屏、后联网"是唯一验证过稳定的组合。
+     * 放到 WiFi_Init() 之后时曾出现"某一整条竖带不显示、看起来像画面整体左移"，
+     * 但后续实验（联网后画整宽黑条可以完整刷新）说明这不是单纯的供电跌落，
+     * 根因仍在定位中：GUI.c 的 GUI_DEBUG_DUMP 会把逻辑显存抽样打印到串口，
+     * 用于区分"内容没画进显存"和"画进去了但没刷到屏上"。定位清楚前不要改顺序。 */
+    CourseGUI();    
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));

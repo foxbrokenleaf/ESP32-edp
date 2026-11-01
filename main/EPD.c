@@ -31,6 +31,17 @@
 #define EPD_SDA_HIGH()       gpio_set_level(EPD_SDA_PIN, 1)
 #define EPD_SDA_LOW()        gpio_set_level(EPD_SDA_PIN, 0)
 
+/* ==================== BUSY 处理 ==================== */
+/* BUSY 是否接到 MCU：1=轮询 BUSY 引脚（最准），0=用固定延时 */
+#define EPD_BUSY_CONNECTED              0
+
+/* BUSY 未接 MCU 时刷新后的固定等待时间（ms）
+ * 全刷 296x152 约需 2.5~3s（25℃），低温可达 10s 以上。
+ * 原来只等 2s 就发 POF(0x02) 断电，会把刷新过程截断：
+ * 已扫过的行正常，未扫到的行保持原样；横屏下逻辑 X 对应物理行，
+ * 表现为"右侧一整条竖带不显示、画面像整体左移"。 */
+#define EPD_BUSY_FIXED_DELAY_MS         6000
+
 /* ==================== 显存（物理布局，[296][19]） ==================== */
 static uint8_t EPD_DisplayBuf[EPD_PHYSICAL_HEIGHT][EPD_PHYSICAL_COLUMN_BYTES];
 
@@ -184,12 +195,15 @@ void EPD_WriteData(uint8_t Data)
 
 void EPD_BUSY_Wait(void)
 {
-    /* 如果 BUSY 接了 MCU，用下面这行（高电平为忙，等变低）：
-     * while (EPD_BUSY_READ() != 0) delay_ms(10);
-     *
-     * 你的硬件 BUSY 未接 MCU，用固定延时。
-     */
-    delay_ms(2000);
+#if EPD_BUSY_CONNECTED
+    /* 高电平为忙，等它变低 */
+    while (EPD_BUSY_READ() != 0) {
+        delay_ms(10);
+    }
+#else
+    /* BUSY 未接 MCU：用固定延时兜底 */
+    delay_ms(EPD_BUSY_FIXED_DELAY_MS);
+#endif
 }
 
 /* ==================== 硬件复位 ==================== */
@@ -272,15 +286,18 @@ void EPD_Update(void)
             EPD_WriteData(0x00);
 
     EPD_WriteCommand(EPD_CMD_POWER_ON);
-    delay_ms(5);
-    EPD_BUSY_Wait();
+#if EPD_BUSY_CONNECTED
+    EPD_BUSY_Wait();            /* 等升压稳定 */
+#else
+    delay_ms(100);              /* PON 只需等几十 ms，不必等满一帧刷新 */
+#endif
 
     EPD_WriteCommand(EPD_CMD_DISPLAY_REFRESH);
     delay_ms(5);
-    EPD_BUSY_Wait();
+    EPD_BUSY_Wait();            /* 全刷最耗时，等不够画面会被截断 */
 
     EPD_WriteCommand(EPD_CMD_POWER_OFF);
-    EPD_BUSY_Wait();
+    delay_ms(100);
 }
 
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
