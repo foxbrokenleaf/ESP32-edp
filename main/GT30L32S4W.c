@@ -1,7 +1,7 @@
 /*
- * @Description: GT30L32S4W 字库芯片应用层实现
+ * @Description: GT30L32S4W 字库�?片应用层实现
  *
- * 地址表来源：芯片 ROM 逐字节分析 + 显示渲染验证（见 GT30L32S4W.h 顶部说明）
+ * 地址表来源：�?�? ROM 逐字节分�? + 显示渲染验证（�?? GT30L32S4W.h 顶部说明�?
  */
 
 #include <string.h>
@@ -16,19 +16,19 @@
 
 static const char *TAG = "GT30L32S4W_APP";
 
-/* ========================= 字库表 ========================= */
+/* ========================= 字库�? ========================= */
 
 typedef struct {
-    uint32_t base_addr;     /* 记录起始地址（不等宽字体含 2 字节宽度头） */
-    uint16_t record_size;   /* 每条记录字节数 */
-    uint8_t  width;         /* 点阵框宽度（像素） */
-    uint8_t  height;        /* 点阵框高度（像素） */
-    uint8_t  bytes_per_row; /* 点阵每行字节数 */
-    uint8_t  header_size;   /* 点阵前字节数（不等宽字体的宽度头） */
+    uint32_t base_addr;     /* 记录起�?�地址（不等�?�字体含 2 字节宽度头） */
+    uint16_t record_size;   /* 每条记录字节�? */
+    uint8_t  width;         /* 点阵框�?�度（像素） */
+    uint8_t  height;        /* 点阵框高度（像素�? */
+    uint8_t  bytes_per_row; /* 点阵每�?�字节数 */
+    uint8_t  header_size;   /* 点阵前字节数（不等�?�字体的宽度头） */
 } gt_font_record_t;
 
 static const gt_font_record_t s_font_table[GT30L32S4W_FONT_MAX] = {
-    /* 定宽 ASCII */
+    /* 定�?? ASCII */
     [GT30L32S4W_FONT_ASCII_5X7]     = { 0x1DDF80, 8,   5,  8,  1, 0 },
     [GT30L32S4W_FONT_ASCII_7X8]     = { 0x1DE280, 8,   7,  8,  1, 0 },
     [GT30L32S4W_FONT_ASCII_6X12]    = { 0x1DBE00, 12,  6,  12, 1, 0 },
@@ -36,7 +36,7 @@ static const gt_font_record_t s_font_table[GT30L32S4W_FONT_MAX] = {
     [GT30L32S4W_FONT_ASCII_12X24]   = { 0x1DFF00, 48,  12, 24, 2, 0 },
     [GT30L32S4W_FONT_ASCII_16X32]   = { 0x1E5A50, 64,  16, 32, 2, 0 },
 
-    /* 不等宽 ASCII：2 字节字宽 + 点阵 */
+    /* 不等�? ASCII�?2 字节字�?? + 点阵 */
     [GT30L32S4W_FONT_ASCII_12_ARIAL] = { 0x1DC400, 26,  12, 12, 2, 2 },
     [GT30L32S4W_FONT_ASCII_12_TIMES] = { 0x1DCDC0, 26,  12, 12, 2, 2 },
     [GT30L32S4W_FONT_ASCII_16_ARIAL] = { 0x1DE580, 34,  16, 16, 2, 2 },
@@ -46,21 +46,21 @@ static const gt_font_record_t s_font_table[GT30L32S4W_FONT_MAX] = {
     [GT30L32S4W_FONT_ASCII_32_ARIAL] = { 0x1E99D0, 130, 32, 32, 4, 2 },
     [GT30L32S4W_FONT_ASCII_32_TIMES] = { 0x1ECA90, 130, 32, 32, 4, 2 },
 
-    /* GB2312 中文 */
+    /* GB2312 �?�? */
     [GT30L32S4W_FONT_GB2312_12X12]  = { 0x000000, 24,  12, 12, 2, 0 },
     [GT30L32S4W_FONT_GB2312_16X16]  = { 0x02C9D0, 32,  16, 16, 2, 0 },
     [GT30L32S4W_FONT_GB2312_24X24]  = { 0x068190, 72,  24, 24, 3, 0 },
     [GT30L32S4W_FONT_GB2312_32X32]  = { 0x0EDF00, 128, 32, 32, 4, 0 },
 
-    /* 特殊字符 8x16：0xACA1~0xACDF */
+    /* 特殊字�?? 8x16�?0xACA1~0xACDF */
     [GT30L32S4W_FONT_GB_SPEC_8X16]  = { 0x1F2880, 16,  8,  16, 1, 0 },
 };
 
-/* ASCII 可见字符个数（0x20~0x7E） */
+/* ASCII �?见字符个数（0x20~0x7E�? */
 #define GT_ASCII_FIRST_CHAR     0x20
 #define GT_ASCII_CHAR_COUNT     95
 
-/* GB2312 符号区字符个数（区码 0xA1~0xA9，共 846 个） */
+/* GB2312 符号区字符个数（区码 0xA1~0xA9，共 846 �?�? */
 #define GT_GB_SYMBOL_COUNT      846
 
 /* ========================= 内部工具 ========================= */
@@ -77,9 +77,9 @@ static bool gt_font_is_gb(gt30l32s4w_font_t font)
 
 /**
  * @brief  GB2312 编码 -> 字库索引
- * @note   区码 0xA1~0xA9：符号区，index = (区-0xA1)*94 + (位-0xA1)
- *         区码 0xB0~0xF7：汉字区，index = 846 + (区-0xB0)*94 + (位-0xA1)
- *         区码 0xAA~0xAF 为 GB2312 未定义区，芯片字库不含
+ * @note   区码 0xA1~0xA9：�?�号区，index = (�?-0xA1)*94 + (�?-0xA1)
+ *         区码 0xB0~0xF7：汉字区，index = 846 + (�?-0xB0)*94 + (�?-0xA1)
+ *         区码 0xAA~0xAF �? GB2312 �?定义区，�?片字库不�?
  */
 static esp_err_t gt_gb2312_to_index(uint16_t gb_code, uint16_t *index)
 {
@@ -100,16 +100,16 @@ static esp_err_t gt_gb2312_to_index(uint16_t gb_code, uint16_t *index)
     return ESP_ERR_INVALID_ARG;
 }
 
-/* GB2312 符号区 + 汉字区总字数：846 + 6763 */
+/* GB2312 符号�? + 汉字区总字数：846 + 6763 */
 #define GT_GB_TOTAL_COUNT       7609
 
-/* 自检用参考字模：ASCII 8x16 的 'A' */
+/* �?检用参考字模：ASCII 8x16 �? 'A' */
 static const uint8_t s_ref_ascii_A_8x16[16] = {
     0x00, 0x10, 0x28, 0x28, 0x28, 0x44, 0x44, 0x7C,
     0x82, 0x82, 0x82, 0x82, 0x00, 0x00, 0x00, 0x00,
 };
 
-/* ========================= 初始化 / 自检 ========================= */
+/* ========================= 初�?�化 / �?检 ========================= */
 
 esp_err_t GT30L32S4W_Init(void)
 {
@@ -154,7 +154,7 @@ esp_err_t GT30L32S4W_SelfTest(void)
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    /* GB2312 16x16 的 "啊" (0xB0A1) 前 4 字节 */
+    /* GB2312 16x16 �? "�?" (0xB0A1) �? 4 字节 */
     err = GT30L32S4W_ReadGb2312(GT30L32S4W_FONT_GB2312_16X16, 0xB0A1,
                                buf, sizeof(buf));
     if (err != ESP_OK) {
@@ -170,7 +170,7 @@ esp_err_t GT30L32S4W_SelfTest(void)
     return ESP_OK;
 }
 
-/* ========================= 字库信息 / 取字模 ========================= */
+/* ========================= 字库信息 / 取字�? ========================= */
 
 esp_err_t GT30L32S4W_GetFontInfo(gt30l32s4w_font_t font, gt30l32s4w_font_info_t *info)
 {
@@ -203,7 +203,7 @@ esp_err_t GT30L32S4W_ReadAscii(gt30l32s4w_font_t font, char c,
 
     uint8_t ch = (uint8_t)c;
     if (ch < GT_ASCII_FIRST_CHAR || ch > (GT_ASCII_FIRST_CHAR + GT_ASCII_CHAR_COUNT - 1)) {
-        ch = '?';   /* 不可显示字符统一用 '?'，避免取到界外数据 */
+        ch = '?';   /* 不可显示字�?�统一�? '?'，避免取到界外数�? */
     }
 
     uint32_t addr = f->base_addr + (uint32_t)(ch - GT_ASCII_FIRST_CHAR) * f->record_size;
@@ -217,7 +217,7 @@ esp_err_t GT30L32S4W_ReadAscii(gt30l32s4w_font_t font, char c,
     if (advance != NULL) {
         uint16_t adv = f->width;
         if (f->header_size >= 2) {
-            /* 不等宽字体：记录头 2 字节大端字宽 */
+            /* 不等宽字体：记录�? 2 字节大�??字�?? */
             adv = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
             if (adv == 0 || adv > f->width) {
                 adv = f->width;
@@ -242,7 +242,7 @@ esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
 
     uint16_t index = 0;
     if (font == GT30L32S4W_FONT_GB_SPEC_8X16) {
-        /* 特殊字符：0xACA1~0xACDF 顺序排列 */
+        /* 特殊字�?�：0xACA1~0xACDF 顺序排列 */
         if (gb_code < 0xACA1 || gb_code > 0xACDF) {
             return ESP_ERR_INVALID_ARG;
         }
@@ -267,7 +267,7 @@ esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
 }
 
 /**
- * @brief 直接读取芯片原始数据（扩展字库 / 图片字模等）
+ * @brief 直接读取�?片原始数�?（扩展字�? / 图片字模等）
  */
 esp_err_t GT30L32S4W_ReadRaw(uint32_t addr, void *buf, size_t len)
 {
@@ -277,7 +277,7 @@ esp_err_t GT30L32S4W_ReadRaw(uint32_t addr, void *buf, size_t len)
 /* ========================= 显示 ========================= */
 
 /**
- * @brief 把 1bpp 点阵画到 EPD 逻辑缓冲区（bit=1 画黑点，bit=0 擦白点）
+ * @brief �? 1bpp 点阵画到 EPD 逻辑缓冲区（bit=1 画黑点，bit=0 擦白点）
  */
 static void gt_draw_bitmap(int16_t x, int16_t y, const uint8_t *bitmap,
                            uint8_t width, uint8_t height, uint8_t bytes_per_row,
@@ -345,9 +345,7 @@ esp_err_t GT30L32S4W_ShowGbChar(int16_t x, int16_t y, uint16_t gb_code,
     return ESP_OK;
 }
 
-esp_err_t GT30L32S4W_ShowString(int16_t x, int16_t y, const char *gbk_text,
-                                gt30l32s4w_font_t ascii_font,
-                                gt30l32s4w_font_t gb_font, uint8_t inverted)
+esp_err_t GT30L32S4W_ShowString(int16_t x, int16_t y, const char *gbk_text, gt30l32s4w_font_t ascii_font, gt30l32s4w_font_t gb_font, uint8_t inverted)
 {
     if (gbk_text == NULL || !gt_font_is_ascii(ascii_font) || !gt_font_is_gb(gb_font)) {
         return ESP_ERR_INVALID_ARG;
@@ -378,7 +376,7 @@ esp_err_t GT30L32S4W_ShowString(int16_t x, int16_t y, const char *gbk_text,
         }
 
         if (*p < 0x80) {
-            /* ASCII 单字节 */
+            /* ASCII 单字�? */
             uint16_t adv = af->width;
             if (GT30L32S4W_ShowChar(cx, (int16_t)(cy + ascii_dy), (char)(*p),
                                     ascii_font, inverted, &adv) == ESP_OK) {
@@ -388,13 +386,13 @@ esp_err_t GT30L32S4W_ShowString(int16_t x, int16_t y, const char *gbk_text,
             }
             p++;
         } else {
-            /* GB2312/GBK 双字节 */
+            /* GB2312/GBK 双字�? */
             if (p[1] == '\0') {
                 break;
             }
             uint16_t code = (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
             (void)GT30L32S4W_ShowGbChar(cx, cy, code, gb_font, inverted);
-            cx += (int16_t)gf->width;   /* 字库外的字符也占位，避免文字错位 */
+            cx += (int16_t)gf->width;   /* 字库外的字�?�也占位，避免文字错�? */
             p += 2;
         }
     }

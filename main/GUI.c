@@ -2,12 +2,13 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-19 20:12:00
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-20 00:09:34
+ * @LastEditTime: 2026-11-01 22:19:06
  * @FilePath: \epd\main\GUI.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #include "GUI.h"
 #include "EPD.h"
+#include "GT30L32S4W.h"
 
 void CourseGUI(void){
     EPD_Clear();
@@ -19,13 +20,8 @@ void CourseGUI(void){
     EPD_ShowChineseChar(0, 96, Font_32x32_E8AFBE, EPD_32X32, 0);        
 
     //课程名称
-    EPD_ShowChineseChar(80, 32, Font_32x32_E69CBA, EPD_32X32, 0);
-    EPD_ShowChineseChar(112, 32, Font_32x32_E7AE97, EPD_32X32, 0);
-    EPD_ShowChineseChar(144, 32, Font_32x32_E69CBA, EPD_32X32, 0);
-    EPD_ShowChineseChar(176, 32, Font_32x32_E7BB84, EPD_32X32, 0);    
-    EPD_ShowChineseChar(208, 32, Font_32x32_E68890, EPD_32X32, 0);
-    EPD_ShowChineseChar(128, 64, Font_32x32_E58E9F, EPD_32X32, 0);
-    EPD_ShowChineseChar(160, 64, Font_32x32_E79086, EPD_32X32, 0);
+    GT30L32S4W_ShowString(48, 32, "Python\xB8\xDF\xBC\xB6\xD3\xA6\xD3\xC3", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_32X32, 0);
+    GT30L32S4W_ShowString(112, 64, "\xC0\xED\xC2\xDB\xBF\xCE", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_32X32, 0);
 
     //上课地点
     EPD_ShowChineseChar(276, 0, Font_16x16_E7A791, EPD_16X16, 0);
