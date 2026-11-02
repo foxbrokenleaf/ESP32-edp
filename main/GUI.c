@@ -2,18 +2,23 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-19 20:12:00
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 00:10:52
+ * @LastEditTime: 2026-11-02 12:52:53
  * @FilePath: \epd\main\GUI.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #include "GUI.h"
 #include "EPD.h"
 #include "GT30L32S4W.h"
+#include <time.h>
+#include <stdbool.h>
+#include "esp_err.h"
+#include "esp_rtc_time.h"
+#include "bsp_rtc.h"
 
 /* ===== 调试开关：1=把逻辑显存抽样成字符画打印到串口 =====
  * 用途：区分"内容根本没画进显存" 和 "画进去了但没刷到屏上"
  * 定位完成后改成 0 即可关闭（不影响功能） */
-#define GUI_DEBUG_DUMP      1
+#define GUI_DEBUG_DUMP      0
 
 #if GUI_DEBUG_DUMP
 #include "esp_system.h"
@@ -61,7 +66,7 @@ void CourseGUI(void){
     GT30L32S4W_ShowString(112, 64, "理论课", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_32X32, 0);
 
     //上课地点
-    EPD_ShowChineseChar(276, 0, Font_16x16_E7A791, EPD_16X16, 0);
+    GT30L32S4W_ShowString(276, 0, "教", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_16X16, 0);
     EPD_ShowChar(280, 16, 'D', EPD_8X16, 0);
     EPD_ShowChar(280, 32, '-', EPD_8X16, 0);
     EPD_ShowChar(280, 48, '4', EPD_8X16, 0);
@@ -76,18 +81,21 @@ void CourseGUI(void){
     EPD_ShowString(163, 131, "15:35~17:10", EPD_8X16, 0);
 
     //第n周
-    EPD_ShowChineseChar(276, 100, Font_16x16_E783AB, EPD_16X16, 0);
+    GT30L32S4W_ShowString(276, 100, "第", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_16X16, 0);
     EPD_ShowNum(276, 116, 2, 2, EPD_8X16, 0);   //n
-    EPD_ShowChineseChar(276, 132, Font_16x16_E783AB, EPD_16X16, 0);
+    GT30L32S4W_ShowString(276, 132, "周", GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_16X16, 0);
 
     //时间
-    EPD_ShowNum(1, 132, 2026, 4, EPD_8X16, 0);  //年
-    EPD_ShowNum(33, 132, 10, 2, EPD_8X16, 0);   //月
-    EPD_ShowNum(49, 132, 20, 2, EPD_8X16, 0);   //日
+    struct tm *tmp_tm = malloc(sizeof(struct tm));
+    rtc_get_time(tmp_tm);
+    EPD_ShowNum(1, 132, 1900 + tmp_tm->tm_year, 4, EPD_8X16, 0);  //年
+    EPD_ShowNum(33, 132, 1 + tmp_tm->tm_mon, 2, EPD_8X16, 0);   //月
+    EPD_ShowNum(49, 132, tmp_tm->tm_mday, 2, EPD_8X16, 0);   //日
 
-    EPD_ShowNum(73, 132, 0, 2, EPD_8X16, 0);   //时
+    EPD_ShowNum(73, 132, tmp_tm->tm_hour, 2, EPD_8X16, 0);   //时
     EPD_ShowChar(89, 132, ':', EPD_8X16, 0);
-    EPD_ShowNum(97, 132, 2, 2, EPD_8X16, 0);   //分
+    EPD_ShowNum(97, 132, tmp_tm->tm_min, 2, EPD_8X16, 0);   //分
+    free(tmp_tm);
 
     //框线
     EPD_DrawLine(143, 128, 143, 151);

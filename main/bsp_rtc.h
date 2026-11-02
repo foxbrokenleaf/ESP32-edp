@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-09-21 23:42:45
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-15 11:17:49
+ * @LastEditTime: 2026-11-02 12:35:15
  * @FilePath: \RMS5000-BlackBoxByESP32\main\bsp_rtc.h
  * @Description: RTCÄ£¿é
  * 
@@ -37,6 +37,9 @@ void      rtc_print_time(void);
 
 esp_err_t rtc_print_task_start(void);
 void      rtc_print_task_stop(void);
+
+esp_err_t rtc_update_task_start(void);
+void      rtc_update_task_stop(void);
 
 /* ========================= NVS ´æ´¢½Ó¿Ú ========================= */
 

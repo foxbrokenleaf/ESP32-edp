@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-09-21 23:42:40
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-10-22 21:55:17
+ * @LastEditTime: 2026-11-02 12:32:57
  * @FilePath: \RMS5000-BlackBoxByESP32\main\bsp_rtc.c
  * @Description: RTC模块
  * 
@@ -20,6 +20,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include "GUI.h"
+
 static const char *TAG = "RTC";
 
 // 默认时区：中国标准时间 UTC+8
@@ -31,6 +33,12 @@ static const char *TAG = "RTC";
 #define RTC_PRINT_TASK_PRIO      5
 #define RTC_PRINT_TASK_PERIOD_MS 1000
 
+// 定时刷屏任务参数
+#define RTC_UPDATE_TASK_NAME      "rtc_update_task"
+#define RTC_UPDATE_TASK_STACK     4096
+#define RTC_UPDATE_TASK_PRIO      5
+#define RTC_UPDATE_TASK_PERIOD_MS 60000
+
 // NVS 存储相关定义
 #define RTC_NVS_NAMESPACE       "rtc_storage"   // NVS 命名空间
 #define RTC_NVS_KEY_TIME        "last_time"     // 保存时间（time_t）的键名
@@ -39,10 +47,13 @@ static const char *TAG = "RTC";
 
 // 定时打印任务句柄
 static TaskHandle_t s_rtc_print_task_handle = NULL;
+// 定时刷屏任务句柄
+static TaskHandle_t s_rtc_update_task_handle = NULL;
 
 /* ========================= 内部函数声明 ========================= */
 
 static void rtc_print_task(void *arg);
+static void rtc_update_task(void *arg);
 
 static esp_err_t rtc_nvs_save_time(time_t time_sec);
 static esp_err_t rtc_nvs_load_time(time_t *time_sec);
@@ -95,6 +106,12 @@ esp_err_t bsp_rtc_init(void)
         ESP_LOGE(TAG, "Failed to start rtc_print_task");
         return ret;
     }
+
+    ret = rtc_update_task_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start rtc_update_task");
+        return ret;
+    }    
 
     ESP_LOGI(TAG, "RTC module initialized");
     return ESP_OK;
@@ -417,6 +434,41 @@ void rtc_print_task_stop(void)
     }
 }
 
+esp_err_t rtc_update_task_start(void)
+{
+    if (s_rtc_update_task_handle != NULL) {
+        ESP_LOGW(TAG, "rtc_print_task already started");
+        return ESP_OK;
+    }
+
+    BaseType_t ret = xTaskCreate(
+        rtc_update_task,
+        RTC_UPDATE_TASK_NAME,
+        RTC_UPDATE_TASK_STACK,
+        NULL,
+        RTC_UPDATE_TASK_PRIO,
+        &s_rtc_update_task_handle
+    );
+
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create rtc_update_task");
+        s_rtc_update_task_handle = NULL;
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "rtc_update_task started");
+    return ESP_OK;
+}
+
+void rtc_update_task_stop(void)
+{
+    if (s_rtc_update_task_handle != NULL) {
+        vTaskDelete(s_rtc_update_task_handle);
+        s_rtc_update_task_handle = NULL;
+        ESP_LOGI(TAG, "rtc_update_task stopped");
+    }
+}
+
 /* ========================= 内部函数实现 ========================= */
 
 /**
@@ -434,6 +486,26 @@ static void rtc_print_task(void *arg)
 
     while (1) {
         rtc_print_time();
+        // 使用 vTaskDelayUntil 保证周期稳定，不随任务执行时间漂移
+        vTaskDelayUntil(&last_wake, period);
+    }
+}
+
+/**
+ * @brief RTC 时间更新任务
+ *        每 1 分更新一次EPD
+ */
+static void rtc_update_task(void *arg)
+{
+    (void)arg;
+
+    const TickType_t period = pdMS_TO_TICKS(RTC_UPDATE_TASK_PERIOD_MS);
+    TickType_t last_wake = xTaskGetTickCount();
+
+    ESP_LOGI(TAG, "rtc_update_task running");
+
+    while (1) {
+        CourseGUI();
         // 使用 vTaskDelayUntil 保证周期稳定，不随任务执行时间漂移
         vTaskDelayUntil(&last_wake, period);
     }
