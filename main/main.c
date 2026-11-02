@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 08:09:39
+ * @LastEditTime: 2026-11-02 22:01:32
  * @FilePath: \epd\main\main.c
  * @Description: 应用程序入口
  */
@@ -20,9 +20,13 @@
 #include "bsp_rtc.h"
 #include "bsp_http.h"
 #include "GT30L32S4W.h"
+#include "bsp_key.h"
 
 static const char *TAG = "MAIN";
 
+void SW3_Key(bsp_key_event_t event, void *user_ctx);
+void SW2_Key(bsp_key_event_t event, void *user_ctx);
+void SW1_Key(bsp_key_event_t event, void *user_ctx);
 
 /**
  * @brief 初始化 NVS：兼容"分区写满/版本升级"导致的启动死循环
@@ -47,6 +51,10 @@ void app_main(void)
     App_NvsInit();
 
     EPD_Init();
+
+    bsp_key_start(17, SW3_Key, BSP_KEY_EVENT_PRESS);
+    bsp_key_start(18, SW2_Key, BSP_KEY_EVENT_PRESS);
+    bsp_key_start(19, SW1_Key, BSP_KEY_EVENT_PRESS);
 
     esp_err_t err = GT30L32S4W_Init();
     if (err != ESP_OK) {
@@ -74,4 +82,19 @@ void app_main(void)
         
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
+
+
+void SW3_Key(bsp_key_event_t event, void *user_ctx){
+    layout_no--;
+    ESP_LOGI(TAG, "SW3_Key");
+}
+
+void SW2_Key(bsp_key_event_t event, void *user_ctx){
+    ESP_LOGI(TAG, "SW2_Key");    
+}
+
+void SW1_Key(bsp_key_event_t event, void *user_ctx){
+    ESP_LOGI(TAG, "SW1_Key");
+    layout_no++;
 }
