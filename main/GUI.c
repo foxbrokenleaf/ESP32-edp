@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-19 20:12:00
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 12:52:53
+ * @LastEditTime: 2026-11-02 19:14:47
  * @FilePath: \epd\main\GUI.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -14,6 +14,8 @@
 #include "esp_err.h"
 #include "esp_rtc_time.h"
 #include "bsp_rtc.h"
+
+uint8_t layout_no = 1;
 
 /* ===== 调试开关：1=把逻辑显存抽样成字符画打印到串口 =====
  * 用途：区分"内容根本没画进显存" 和 "画进去了但没刷到屏上"
@@ -121,4 +123,42 @@ void CourseGUI(void){
     /* 若这里耗时远小于 EPD_BUSY_FIXED_DELAY_MS，说明刷新等待没生效 */
     ESP_LOGI(TAG, "EPD_Update took %d ms", (int)((esp_timer_get_time() - t_refresh_us) / 1000));
 #endif
+}
+
+void ClockGUI(void){
+    EPD_Clear();
+
+    {    
+    char *buf = malloc(5);
+    if (rtc_format_time(buf, 5, "%Y") == ESP_OK)
+        GT30L32S4W_ShowString(4, 88, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+    free(buf);
+    }
+    {    
+    char *buf = malloc(6);
+    if (rtc_format_time(buf, 6, "%m/%d") == ESP_OK)
+        GT30L32S4W_ShowString(0, 120, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+    free(buf);
+    }    
+    {    
+    char *buf = malloc(10);
+    if (rtc_format_time(buf, 10, "%A") == ESP_OK)
+        GT30L32S4W_ShowString(120, 120, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+    free(buf);
+    }
+    {
+    char *buf = malloc(6);
+    if (rtc_format_time(buf, 6, "%H:%M") == ESP_OK)
+        GT30L32S4W_ShowString(146, 51, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+    free(buf);
+    }    
+    GT30L32S4W_ShowString(256, 0, "\xAC\xC0\xAC\xC4 \xAC\xC6\xAC\xC9", GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB_SPEC_8X16, 0);
+
+
+    //框线
+    EPD_DrawLine(0, 15, 295, 15);
+    EPD_DrawLine(79, 120, 295, 120);
+    EPD_DrawLine(80, 15, 80, 151);  
+
+    EPD_Update();
 }
