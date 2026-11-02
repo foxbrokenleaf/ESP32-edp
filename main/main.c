@@ -65,6 +65,9 @@ void app_main(void)
     Https_Init();
     ESP_LOGI(TAG, "net init done");
 
+    // 网络初始化完成后启动 SNTP，首次同步成功后时间会写入 NVS
+    bsp_sntp_init();
+
     // CourseGUI();    
 
     while (1) {

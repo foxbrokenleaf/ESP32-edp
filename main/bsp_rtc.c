@@ -20,6 +20,9 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include "esp_netif_sntp.h"
+#include "esp_sntp.h"
+
 #include "GUI.h"
 
 static const char *TAG = "RTC";
@@ -39,6 +42,11 @@ static const char *TAG = "RTC";
 #define RTC_UPDATE_TASK_PRIO      5
 #define RTC_UPDATE_TASK_PERIOD_MS 60000
 
+// SNTP 时间同步参数
+#define SNTP_SERVER_NAME           "ntp.aliyun.com"     // NTP 服务器（CONFIG_LWIP_SNTP_MAX_SERVERS=1，仅支持一个）
+#define SNTP_SYNC_INTERVAL_MS      (60 * 60 * 1000)     // 周期同步间隔：1 小时
+#define SNTP_FIRST_SYNC_TIMEOUT_MS (10 * 1000)          // 首次同步等待超时：10 秒
+
 // NVS 存储相关定义
 #define RTC_NVS_NAMESPACE       "rtc_storage"   // NVS 命名空间
 #define RTC_NVS_KEY_TIME        "last_time"     // 保存时间（time_t）的键名
@@ -49,6 +57,9 @@ static const char *TAG = "RTC";
 static TaskHandle_t s_rtc_print_task_handle = NULL;
 // 定时刷屏任务句柄
 static TaskHandle_t s_rtc_update_task_handle = NULL;
+
+// SNTP 同步完成标志（回调中置位，由 rtc_print_task 保存到 NVS）
+static volatile bool s_time_synced = false;
 
 /* ========================= 内部函数声明 ========================= */
 
@@ -63,6 +74,8 @@ static esp_err_t rtc_nvs_load_tm(struct tm *timeinfo);
 
 static esp_err_t rtc_nvs_save_timezone(const char *tz);
 static esp_err_t rtc_nvs_load_timezone(char *tz, size_t len);
+
+static void sntp_sync_callback(struct timeval *tv);
 
 /* ========================= 对外接口实现 ========================= */
 
@@ -486,6 +499,15 @@ static void rtc_print_task(void *arg)
 
     while (1) {
         rtc_print_time();
+
+        // SNTP 同步成功后保存时间到 NVS（在本任务中执行，避免阻塞 lwIP 线程）
+        if (s_time_synced) {
+            s_time_synced = false;
+            if (rtc_save_current_tm_to_nvs() != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to save SNTP time to NVS");
+            }
+        }
+
         // 使用 vTaskDelayUntil 保证周期稳定，不随任务执行时间漂移
         vTaskDelayUntil(&last_wake, period);
     }
@@ -726,6 +748,84 @@ static esp_err_t rtc_nvs_load_timezone(char *tz, size_t len)
     return ret;
 }
 
-void bsp_sntp_init(void){
-    
+/* ========================= SNTP 时间同步 ========================= */
+
+/***********************************************************************
+ *@author              foxbrokenleaf
+ *@brief               SNTP 时间同步完成回调
+ *@see                 无
+ *@param        tv     服务器返回的时间（系统时间此时已更新）
+ *@return              无
+ *@exception           无
+ *@date                 2026/11/02 14:00
+ *@version              V0.0
+ *************************************************************************/
+static void sntp_sync_callback(struct timeval *tv)
+{
+    if (tv == NULL) {
+        return;
+    }
+
+    struct tm timeinfo;
+    if (localtime_r(&tv->tv_sec, &timeinfo) == NULL) {
+        ESP_LOGW(TAG, "SNTP synced, but failed to convert to local time");
+        return;
+    }
+
+    ESP_LOGI(TAG, "SNTP sync done: %04d-%02d-%02d %02d:%02d:%02d",
+             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+    // 仅置位标志，NVS 写入由 rtc_print_task 完成，避免阻塞 lwIP 线程
+    s_time_synced = true;
+}
+
+/***********************************************************************
+ *@author              foxbrokenleaf
+ *@brief               初始化并启动 SNTP 时间同步
+ *                      注意：必须在 WiFi_Init() 之后调用（依赖 esp_netif/lwIP 已初始化）
+ *@see                 无
+ *@param                无
+ *@return               无
+ *@exception            SNTP 初始化失败、首次同步超时
+ *@date                 2026/11/02 14:00
+ *@version              V0.0
+ *************************************************************************/
+void bsp_sntp_init(void)
+{
+    static bool s_sntp_started = false;
+
+    if (s_sntp_started) {
+        ESP_LOGW(TAG, "SNTP already started");
+        return;
+    }
+
+    // 配置 SNTP：仅一个服务器（CONFIG_LWIP_SNTP_MAX_SERVERS = 1）
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG(SNTP_SERVER_NAME);
+    config.start = true;                 // 初始化后立即启动 SNTP 轮询
+    config.smooth_sync = false;          // 直接跳变，EPD 下一次刷新即显示正确时间
+    config.wait_for_sync = true;         // 创建同步信号量，供 sync_wait 使用
+    config.sync_cb = sntp_sync_callback; // 同步完成回调
+
+    esp_err_t ret = esp_netif_sntp_init(&config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SNTP init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+    s_sntp_started = true;
+
+    // 周期同步间隔（同步失败时 lwIP 会自动重试，WiFi 掉线重连后也能恢复）
+    esp_sntp_set_sync_interval(SNTP_SYNC_INTERVAL_MS);
+
+    ESP_LOGI(TAG, "SNTP started, server: %s", SNTP_SERVER_NAME);
+
+    // 等待首次同步，超时不影响后台继续同步
+    ret = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(SNTP_FIRST_SYNC_TIMEOUT_MS));
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "SNTP first sync completed");
+        rtc_print_time();
+    } else {
+        ESP_LOGW(TAG, "SNTP first sync not completed (%s), keep retrying in background",
+                 esp_err_to_name(ret));
+    }
 }
