@@ -34,6 +34,8 @@
 #define EPD_6X8                 6       /* 宽 6 像素，高 8 像素 */
 #define EPD_16X16               16
 #define EPD_32X32               32
+#define EPD_32X64               64      /* 宽 32 x 高 64 数字点阵（PCtoLCD2022_BitmapFont）
+                                         * 宏值取 64 以便与 EPD_32X32 区分，实际显示宽度仍是 32 */
 
 /* 填充模式 *********************/
 #define EPD_UNFILLED            0

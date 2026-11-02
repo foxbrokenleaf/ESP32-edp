@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-19 20:12:00
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 19:14:47
+ * @LastEditTime: 2026-11-02 21:09:15
  * @FilePath: \epd\main\GUI.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -149,7 +149,8 @@ void ClockGUI(void){
     {
     char *buf = malloc(6);
     if (rtc_format_time(buf, 6, "%H:%M") == ESP_OK)
-        GT30L32S4W_ShowString(146, 51, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+        // GT30L32S4W_ShowString(146, 51, buf, GT30L32S4W_FONT_ASCII_32_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
+        EPD_ShowString(108, 36, buf, EPD_32X64, 0);
     free(buf);
     }    
     GT30L32S4W_ShowString(256, 0, "\xAC\xC0\xAC\xC4 \xAC\xC6\xAC\xC9", GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB_SPEC_8X16, 0);
@@ -158,7 +159,13 @@ void ClockGUI(void){
     //框线
     EPD_DrawLine(0, 15, 295, 15);
     EPD_DrawLine(79, 120, 295, 120);
-    EPD_DrawLine(80, 15, 80, 151);  
+    EPD_DrawLine(80, 15, 80, 151);
+    
+    EPD_DrawLine(107, 15, 107, 120);
+    EPD_DrawLine(268, 15, 268, 120);
+    EPD_DrawLine(107, 35, 268, 35);
+    EPD_DrawLine(107, 100, 268, 100);
+    EPD_DrawLine(0, 87, 80, 87);
 
     EPD_Update();
 }

@@ -15,6 +15,9 @@
 extern const uint8_t EPD_F8x16[][16];
 extern const uint8_t EPD_F6x8[][6];
 
+/* PCtoLCD2022 32x64 点阵数字字体：0~9 和 ':'，共 11 个字形 */
+extern const uint8_t PCtoLCD2022_BitmapFont[11][256];
+
 /* 图像测试数据 */
 extern const uint8_t EPD_Image_Test[];
 

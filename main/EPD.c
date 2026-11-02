@@ -10,7 +10,7 @@
 #include "freertos/task.h"
 #include "esp_rom_sys.h"
 
-/* ==================== å¼•è„šå®šä¹‰ï¼ˆæŒ‰å®é™…æ¥çº¿ä¿®æ”¹ï¼‰ ==================== */
+/* ==================== Òı½Å¶¨Òå£¨°´Êµ¼Ê½ÓÏßĞŞ¸Ä£© ==================== */
 #define EPD_BUSY_PIN    4
 #define EPD_RST_PIN     13
 #define EPD_DC_PIN      14
@@ -18,7 +18,7 @@
 #define EPD_SCL_PIN     26
 #define EPD_SDA_PIN     25
 
-/* ==================== å¼•è„šæ“ä½œå®ï¼ˆESP-IDFï¼‰ ==================== */
+/* ==================== Òı½Å²Ù×÷ºê£¨ESP-IDF£© ==================== */
 #define EPD_BUSY_READ()      gpio_get_level(EPD_BUSY_PIN)
 #define EPD_RST_HIGH()       gpio_set_level(EPD_RST_PIN, 1)
 #define EPD_RST_LOW()        gpio_set_level(EPD_RST_PIN, 0)
@@ -31,21 +31,21 @@
 #define EPD_SDA_HIGH()       gpio_set_level(EPD_SDA_PIN, 1)
 #define EPD_SDA_LOW()        gpio_set_level(EPD_SDA_PIN, 0)
 
-/* ==================== BUSY å¤„ç† ==================== */
-/* BUSY æ˜¯å¦æ¥åˆ° MCUï¼š1=è½®è¯¢ BUSY å¼•è„šï¼ˆæœ€å‡†ï¼‰ï¼Œ0=ç”¨å›ºå®šå»¶æ—¶ */
+/* ==================== BUSY ´¦Àí ==================== */
+/* BUSY ÊÇ·ñ½Óµ½ MCU£º1=ÂÖÑ¯ BUSY Òı½Å£¨×î×¼£©£¬0=ÓÃ¹Ì¶¨ÑÓÊ± */
 #define EPD_BUSY_CONNECTED              0
 
-/* BUSY æœªæ¥ MCU æ—¶åˆ·æ–°åçš„å›ºå®šç­‰å¾…æ—¶é—´ï¼ˆmsï¼‰
- * å…¨åˆ· 296x152 çº¦éœ€ 2.5~3sï¼ˆ25â„ƒï¼‰ï¼Œä½æ¸©å¯è¾¾ 10s ä»¥ä¸Šã€‚
- * åŸæ¥åªç­‰ 2s å°±å‘ POF(0x02) æ–­ç”µï¼Œä¼šæŠŠåˆ·æ–°è¿‡ç¨‹æˆªæ–­ï¼š
- * å·²æ‰«è¿‡çš„è¡Œæ­£å¸¸ï¼Œæœªæ‰«åˆ°çš„è¡Œä¿æŒåŸæ ·ï¼›æ¨ªå±ä¸‹é€»è¾‘ X å¯¹åº”ç‰©ç†è¡Œï¼Œ
- * è¡¨ç°ä¸º"å³ä¾§ä¸€æ•´æ¡ç«–å¸¦ä¸æ˜¾ç¤ºã€ç”»é¢åƒæ•´ä½“å·¦ç§»"ã€‚ */
+/* BUSY Î´½Ó MCU Ê±Ë¢ĞÂºóµÄ¹Ì¶¨µÈ´ıÊ±¼ä£¨ms£©
+ * È«Ë¢ 296x152 Ô¼Ğè 2.5~3s£¨25¡æ£©£¬µÍÎÂ¿É´ï 10s ÒÔÉÏ¡£
+ * Ô­À´Ö»µÈ 2s ¾Í·¢ POF(0x02) ¶Ïµç£¬»á°ÑË¢ĞÂ¹ı³Ì½Ø¶Ï£º
+ * ÒÑÉ¨¹ıµÄĞĞÕı³££¬Î´É¨µ½µÄĞĞ±£³ÖÔ­Ñù£»ºáÆÁÏÂÂß¼­ X ¶ÔÓ¦ÎïÀíĞĞ£¬
+ * ±íÏÖÎª"ÓÒ²àÒ»ÕûÌõÊú´ø²»ÏÔÊ¾¡¢»­ÃæÏñÕûÌå×óÒÆ"¡£ */
 #define EPD_BUSY_FIXED_DELAY_MS         6000
 
-/* ==================== æ˜¾å­˜ï¼ˆç‰©ç†å¸ƒå±€ï¼Œ[296][19]ï¼‰ ==================== */
+/* ==================== ÏÔ´æ£¨ÎïÀí²¼¾Ö£¬[296][19]£© ==================== */
 static uint8_t EPD_DisplayBuf[EPD_PHYSICAL_HEIGHT][EPD_PHYSICAL_COLUMN_BYTES];
 
-/* ==================== å»¶æ—¶ï¼ˆESP-IDFï¼‰ ==================== */
+/* ==================== ÑÓÊ±£¨ESP-IDF£© ==================== */
 static void delay_ms(uint32_t ms)
 {
     vTaskDelay(pdMS_TO_TICKS(ms));
@@ -56,7 +56,7 @@ static void delay_us(uint32_t us)
     esp_rom_delay_us(us);
 }
 
-/* ==================== æ•°å­¦å·¥å…· ==================== */
+/* ==================== ÊıÑ§¹¤¾ß ==================== */
 static uint32_t EPD_Pow(uint32_t X, uint32_t Y)
 {
     uint32_t Result = 1;
@@ -87,7 +87,7 @@ static uint8_t EPD_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t E
     return 0;
 }
 
-/* ==================== åæ ‡å˜æ¢ï¼ˆé€»è¾‘ â†’ ç‰©ç†ï¼‰ ==================== */
+/* ==================== ×ø±ê±ä»»£¨Âß¼­ ¡ú ÎïÀí£© ==================== */
 static void EPD_LogicToPhys(int16_t logicX, int16_t logicY, int16_t *physX, int16_t *physY)
 {
 #if (EPD_ORIENTATION == EPD_ORIENTATION_PORTRAIT)
@@ -99,10 +99,10 @@ static void EPD_LogicToPhys(int16_t logicX, int16_t logicY, int16_t *physX, int1
     *physY = EPD_PHYSICAL_HEIGHT - 1 - logicY;
 
 #elif (EPD_ORIENTATION == EPD_ORIENTATION_LANDSCAPE)
-    /* æ¨ªå±ï¼šé¡ºæ—¶é’ˆæ—‹è½¬ 90 åº¦
-     * é€»è¾‘å®½ 296ã€é«˜ 152ï¼›ç‰©ç†å®½ 152ã€é«˜ 296
-     * é€»è¾‘ X(0-295) â†’ ç‰©ç† Y(0-295)
-     * é€»è¾‘ Y(0-151) â†’ ç‰©ç† X(0-151)ï¼ˆåå‘ï¼‰
+    /* ºáÆÁ£ºË³Ê±ÕëĞı×ª 90 ¶È
+     * Âß¼­¿í 296¡¢¸ß 152£»ÎïÀí¿í 152¡¢¸ß 296
+     * Âß¼­ X(0-295) ¡ú ÎïÀí Y(0-295)
+     * Âß¼­ Y(0-151) ¡ú ÎïÀí X(0-151)£¨·´Ïò£©
      */
     *physX = logicY;
     *physY = EPD_PHYSICAL_HEIGHT - 1 - logicX;
@@ -127,13 +127,13 @@ static uint8_t EPD_IsInPhysicalRange(int16_t X, int16_t Y)
     return (X >= 0 && X < EPD_PHYSICAL_WIDTH && Y >= 0 && Y < EPD_PHYSICAL_HEIGHT) ? 1 : 0;
 }
 
-/* ==================== è½¯ä»¶ SPI ==================== */
+/* ==================== Èí¼ş SPI ==================== */
 static void EPD_W_SCL(uint8_t BitValue) { BitValue ? EPD_SCL_HIGH() : EPD_SCL_LOW(); }
 static void EPD_W_SDA(uint8_t BitValue) { BitValue ? EPD_SDA_HIGH() : EPD_SDA_LOW(); }
 
 static void EPD_GPIO_Init(void)
 {
-    /* BUSY è¾“å…¥ï¼ˆå¦‚æœæ¥äº†ï¼›æœªæ¥åˆ™è¿™é‡Œä¸å½±å“ï¼ŒBUSY_Wait ç”¨å›ºå®šå»¶æ—¶ï¼‰ */
+    /* BUSY ÊäÈë£¨Èç¹û½ÓÁË£»Î´½ÓÔòÕâÀï²»Ó°Ïì£¬BUSY_Wait ÓÃ¹Ì¶¨ÑÓÊ±£© */
     gpio_config_t io_in = {
         .pin_bit_mask = (1ULL << EPD_BUSY_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -143,7 +143,7 @@ static void EPD_GPIO_Init(void)
     };
     gpio_config(&io_in);
 
-    /* è¾“å‡ºå¼•è„š */
+    /* Êä³öÒı½Å */
     gpio_config_t io_out = {
         .pin_bit_mask = (1ULL << EPD_RST_PIN) | (1ULL << EPD_DC_PIN) |
                         (1ULL << EPD_CS_PIN)  | (1ULL << EPD_SCL_PIN) |
@@ -196,17 +196,17 @@ void EPD_WriteData(uint8_t Data)
 void EPD_BUSY_Wait(void)
 {
 #if EPD_BUSY_CONNECTED
-    /* é«˜ç”µå¹³ä¸ºå¿™ï¼Œç­‰å®ƒå˜ä½ */
+    /* ¸ßµçÆ½ÎªÃ¦£¬µÈËü±äµÍ */
     while (EPD_BUSY_READ() != 0) {
         delay_ms(10);
     }
 #else
-    /* BUSY æœªæ¥ MCUï¼šç”¨å›ºå®šå»¶æ—¶å…œåº• */
+    /* BUSY Î´½Ó MCU£ºÓÃ¹Ì¶¨ÑÓÊ±¶µµ× */
     delay_ms(EPD_BUSY_FIXED_DELAY_MS);
 #endif
 }
 
-/* ==================== ç¡¬ä»¶å¤ä½ ==================== */
+/* ==================== Ó²¼ş¸´Î» ==================== */
 static void EPD_COG_Reset(void)
 {
     delay_ms(5);
@@ -220,7 +220,7 @@ static void EPD_COG_Reset(void)
     delay_ms(5);
 }
 
-/* ==================== åˆå§‹åŒ– ==================== */
+/* ==================== ³õÊ¼»¯ ==================== */
 void EPD_Init(void)
 {
     EPD_GPIO_Init();
@@ -270,7 +270,7 @@ void EPD_Init(void)
     EPD_Clear();
 }
 
-/* ==================== åˆ·æ–°ï¼ˆå†™ SRAM + ä¸Šç”µ + åˆ·æ–° + æ–­ç”µï¼‰ ==================== */
+/* ==================== Ë¢ĞÂ£¨Ğ´ SRAM + ÉÏµç + Ë¢ĞÂ + ¶Ïµç£© ==================== */
 void EPD_Update(void)
 {
     uint16_t i, j;
@@ -287,14 +287,14 @@ void EPD_Update(void)
 
     EPD_WriteCommand(EPD_CMD_POWER_ON);
 #if EPD_BUSY_CONNECTED
-    EPD_BUSY_Wait();            /* ç­‰å‡å‹ç¨³å®š */
+    EPD_BUSY_Wait();            /* µÈÉıÑ¹ÎÈ¶¨ */
 #else
-    delay_ms(100);              /* PON åªéœ€ç­‰å‡ å msï¼Œä¸å¿…ç­‰æ»¡ä¸€å¸§åˆ·æ–° */
+    delay_ms(100);              /* PON Ö»ĞèµÈ¼¸Ê® ms£¬²»±ØµÈÂúÒ»Ö¡Ë¢ĞÂ */
 #endif
 
     EPD_WriteCommand(EPD_CMD_DISPLAY_REFRESH);
     delay_ms(5);
-    EPD_BUSY_Wait();            /* å…¨åˆ·æœ€è€—æ—¶ï¼Œç­‰ä¸å¤Ÿç”»é¢ä¼šè¢«æˆªæ–­ */
+    EPD_BUSY_Wait();            /* È«Ë¢×îºÄÊ±£¬µÈ²»¹»»­Ãæ»á±»½Ø¶Ï */
 
     EPD_WriteCommand(EPD_CMD_POWER_OFF);
     delay_ms(100);
@@ -302,10 +302,10 @@ void EPD_Update(void)
 
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
 {
-    EPD_Update();  /* ç®€åŒ–ï¼šåŒºåŸŸåˆ·æ–°ä¹Ÿå…¨å±åˆ· */
+    EPD_Update();  /* ¼ò»¯£ºÇøÓòË¢ĞÂÒ²È«ÆÁË¢ */
 }
 
-/* ==================== æ¸…å± ==================== */
+/* ==================== ÇåÆÁ ==================== */
 void EPD_Clear(void)
 {
     uint16_t i, j;
@@ -360,13 +360,29 @@ void EPD_ReverseArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
     }
 }
 
-/* ==================== å­—ç¬¦æ˜¾ç¤º ==================== */
+/* ==================== ×Ö·ûÏÔÊ¾ ==================== */
+/* 32x64 Êı×ÖµãÕóË÷Òı£º'0'~'9' ¶ÔÓ¦ 0~9£¬':' ¶ÔÓ¦ 10£¬ÆäËü×Ö·û·µ»Ø -1 */
+static int16_t EPD_GetBitmap32x64Index(char Char)
+{
+    if (Char >= '0' && Char <= '9') return Char - '0';
+    if (Char == ':') return 10;
+    return -1;
+}
+
+/* ·µ»Ø×ÖÌå¶ÔÓ¦µÄºáÏò²½½ø¿í¶È
+ * EPD_32X64 µÄºêÖµÊÇ 64£¨ÎªÁËÓë EPD_32X32 Çø·Ö£©£¬Êµ¼ÊÏÔÊ¾¿í¶ÈÊÇ 32 */
+static uint16_t EPD_FontWidth(uint8_t FontSize)
+{
+    if (FontSize == EPD_32X64) return 32;
+    return FontSize;
+}
+
 void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t i, j, temp, pos;
     int16_t physX, physY;
     uint8_t byteIndex, bitIndex;
-    uint8_t pixel;          /* æœ€ç»ˆè¦å†™å…¥çš„ä½ï¼š1=é»‘ï¼Œ0=ç™½ï¼ˆé¢æ¿ææ€§ï¼‰ */
+    uint8_t pixel;          /* ×îÖÕÒªĞ´ÈëµÄÎ»£º1=ºÚ£¬0=°×£¨Ãæ°å¼«ĞÔ£© */
 
     if (FontSize == EPD_8X16) {
         pos = Char - ' ';
@@ -379,17 +395,45 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inv
                         byteIndex = physX / 8;
                         bitIndex = 7 - (physX % 8);
 
-                        /* å­—æ¨¡ bit=1 è¡¨ç¤ºå­—äº®ç‚¹ */
+                        /* ×ÖÄ£ bit=1 ±íÊ¾×ÖÁÁµã */
                         pixel = (temp & (0x80 >> j)) ? 1 : 0;
 
-                        /* åè‰²ï¼šå­—äº®ç‚¹â†’ç™½(0)ï¼ŒèƒŒæ™¯â†’é»‘(1) */
+                        /* ·´É«£º×ÖÁÁµã¡ú°×(0)£¬±³¾°¡úºÚ(1) */
                         if (Inverted) pixel = !pixel;
 
-                        /* é¢æ¿ææ€§ï¼š1=é»‘ï¼Œ0=ç™½ */
+                        /* Ãæ°å¼«ĞÔ£º1=ºÚ£¬0=°× */
                         if (pixel)
-                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* å†™ 0 = ç™½ */
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* Ğ´ 0 = °× */
                         else
-                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* å†™ 1 = é»‘ */
+                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* Ğ´ 1 = ºÚ */
+                    }
+                }
+            }
+        }
+    } else if (FontSize == EPD_32X64) {
+        /* PCtoLCD2022 32x64 Êı×ÖµãÕó£ºÖğĞĞÈ¡Ä£¡¢MSB ÔÚÇ°¡¢bit=1 ±íÊ¾µãÁÁ */
+        int16_t index = EPD_GetBitmap32x64Index(Char);
+        if (index < 0) return;                  /* ¸ÃµãÕóÖ»ÓĞ 0~9 ºÍ ':'£¬ÆäËü×Ö·û²»»æÖÆ */
+
+        for (i = 0; i < 64; i++) {              /* ĞĞ£º0~63 */
+            for (j = 0; j < 32; j++) {          /* ÁĞ£º0~31 */
+                if (EPD_IsInLogicRange(X + j, Y + i)) {
+                    EPD_LogicToPhys(X + j, Y + i, &physX, &physY);
+                    if (EPD_IsInPhysicalRange(physX, physY)) {
+                        byteIndex = physX / 8;
+                        bitIndex = 7 - (physX % 8);
+
+                        temp = PCtoLCD2022_BitmapFont[index][i * 4 + (j >> 3)];
+                        pixel = (temp & (0x80 >> (j & 0x07))) ? 1 : 0;
+
+                        /* ·´É«£ºµãÁÁÎ»Óë±³¾°Î»»¥»» */
+                        if (Inverted) pixel = !pixel;
+
+                        /* Î»Ğ´Èë¹æÔòÓëÆäËü×ÖÌå±£³ÖÒ»ÖÂ */
+                        if (pixel)
+                            EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);
+                        else
+                            EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);
                     }
                 }
             }
@@ -420,22 +464,22 @@ void EPD_ShowChar(int16_t X, int16_t Y, char Char, uint8_t FontSize, uint8_t Inv
 }
 
 /*
- * æ˜¾ç¤ºæ±‰å­—
- * X, Y      : é€»è¾‘åæ ‡ï¼ˆå·¦ä¸Šè§’èµ·ç‚¹ï¼‰
- * pFontData : å­—æ¨¡æ•°æ®æŒ‡é’ˆ
- *             - 16x16: 32 å­—èŠ‚ï¼Œé€è¡Œï¼Œæ¯è¡Œ 2 å­—èŠ‚ï¼Œé«˜ä½åœ¨å‰
- *             - 32x32: 128 å­—èŠ‚ï¼Œé€è¡Œï¼Œæ¯è¡Œ 4 å­—èŠ‚ï¼Œé«˜ä½åœ¨å‰
- * FontSize  : EPD_16X16 æˆ– EPD_32X32
- * Inverted  : 0=æ­£å¸¸ï¼Œ1=åè‰²
+ * ÏÔÊ¾ºº×Ö
+ * X, Y      : Âß¼­×ø±ê£¨×óÉÏ½ÇÆğµã£©
+ * pFontData : ×ÖÄ£Êı¾İÖ¸Õë
+ *             - 16x16: 32 ×Ö½Ú£¬ÖğĞĞ£¬Ã¿ĞĞ 2 ×Ö½Ú£¬¸ßÎ»ÔÚÇ°
+ *             - 32x32: 128 ×Ö½Ú£¬ÖğĞĞ£¬Ã¿ĞĞ 4 ×Ö½Ú£¬¸ßÎ»ÔÚÇ°
+ * FontSize  : EPD_16X16 »ò EPD_32X32
+ * Inverted  : 0=Õı³££¬1=·´É«
  */
 void EPD_ShowChineseChar(int16_t X, int16_t Y, const uint8_t *pFontData, uint8_t FontSize, uint8_t Inverted)
 {
     uint8_t  byteIndex, bitIndex;
-    uint8_t  pixel;                 /* 1=é»‘ï¼Œ0=ç™½ï¼ˆé¢æ¿ææ€§ï¼‰ */
+    uint8_t  pixel;                 /* 1=ºÚ£¬0=°×£¨Ãæ°å¼«ĞÔ£© */
     int16_t  physX, physY;
     uint16_t row, col;
     uint16_t width, height;
-    uint16_t bytesPerRow;           /* æ¯è¡Œå ç”¨çš„å­—èŠ‚æ•° */
+    uint16_t bytesPerRow;           /* Ã¿ĞĞÕ¼ÓÃµÄ×Ö½ÚÊı */
     uint8_t  temp;
 
     if (pFontData == NULL) return;
@@ -457,16 +501,16 @@ void EPD_ShowChineseChar(int16_t X, int16_t Y, const uint8_t *pFontData, uint8_t
 
     for (row = 0; row < height; row++) {
         for (col = 0; col < width; col++) {
-            /* å–å‡ºè¯¥åƒç´ å¯¹åº”çš„å­—æ¨¡å­—èŠ‚ */
+            /* È¡³ö¸ÃÏñËØ¶ÔÓ¦µÄ×ÖÄ£×Ö½Ú */
             temp = pFontData[row * bytesPerRow + (col >> 3)];
 
-            /* å­—æ¨¡ bit=1 è¡¨ç¤ºå­—äº®ç‚¹ï¼ˆé«˜ä½åœ¨å‰ï¼‰ */
+            /* ×ÖÄ£ bit=1 ±íÊ¾×ÖÁÁµã£¨¸ßÎ»ÔÚÇ°£© */
             pixel = (temp & (0x80 >> (col & 0x07))) ? 1 : 0;
 
-            /* åè‰²ï¼šå­—äº®ç‚¹â†’ç™½(0)ï¼ŒèƒŒæ™¯â†’é»‘(1) */
+            /* ·´É«£º×ÖÁÁµã¡ú°×(0)£¬±³¾°¡úºÚ(1) */
             if (Inverted) pixel = !pixel;
 
-            /* é€»è¾‘åæ ‡ â†’ ç‰©ç†åæ ‡ */
+            /* Âß¼­×ø±ê ¡ú ÎïÀí×ø±ê */
             if (!EPD_IsInLogicRange(X + col, Y + row)) continue;
             EPD_LogicToPhys(X + col, Y + row, &physX, &physY);
             if (!EPD_IsInPhysicalRange(physX, physY)) continue;
@@ -474,11 +518,11 @@ void EPD_ShowChineseChar(int16_t X, int16_t Y, const uint8_t *pFontData, uint8_t
             byteIndex = physX / 8;
             bitIndex  = 7 - (physX % 8);
 
-            /* é¢æ¿ææ€§ï¼š1=é»‘ï¼Œ0=ç™½ */
+            /* Ãæ°å¼«ĞÔ£º1=ºÚ£¬0=°× */
             if (pixel)
-                EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* å†™ 0 = ç™½ */
+                EPD_DisplayBuf[physY][byteIndex] &= ~(0x01 << bitIndex);  /* Ğ´ 0 = °× */
             else
-                EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* å†™ 1 = é»‘ */
+                EPD_DisplayBuf[physY][byteIndex] |=  (0x01 << bitIndex);  /* Ğ´ 1 = ºÚ */
         }
     }
 }
@@ -495,9 +539,11 @@ const uint8_t *EPD_FindChinese(uint16_t code, uint8_t FontSize, const EPD_Chines
 void EPD_ShowString(int16_t X, int16_t Y, char *String, uint8_t FontSize, uint8_t Inverted)
 {
     uint16_t XOffset = 0;
+    uint16_t Width   = EPD_FontWidth(FontSize);
+
     while (*String != '\0') {
         EPD_ShowChar(X + XOffset, Y, *String, FontSize, Inverted);
-        XOffset += FontSize;
+        XOffset += Width;
         String++;
     }
 }
@@ -506,7 +552,7 @@ void EPD_ShowNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t 
 {
     uint8_t i;
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
+        EPD_ShowChar(X + i * EPD_FontWidth(FontSize), Y, Number / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
 }
 
 void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
@@ -516,7 +562,7 @@ void EPD_ShowSignedNum(int16_t X, int16_t Y, int32_t Number, uint8_t Length, uin
     if (Number >= 0) { EPD_ShowChar(X, Y, '+', FontSize, Inverted); Number1 = Number; }
     else             { EPD_ShowChar(X, Y, '-', FontSize, Inverted); Number1 = -Number; }
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + (i + 1) * FontSize, Y, Number1 / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
+        EPD_ShowChar(X + (i + 1) * EPD_FontWidth(FontSize), Y, Number1 / EPD_Pow(10, Length - i - 1) % 10 + '0', FontSize, Inverted);
 }
 
 void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8_t FontSize, uint8_t Inverted)
@@ -524,8 +570,8 @@ void EPD_ShowHexNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8
     uint8_t i, SingleNumber;
     for (i = 0; i < Length; i++) {
         SingleNumber = Number / EPD_Pow(16, Length - i - 1) % 16;
-        if (SingleNumber < 10) EPD_ShowChar(X + i * FontSize, Y, SingleNumber + '0', FontSize, Inverted);
-        else                   EPD_ShowChar(X + i * FontSize, Y, SingleNumber - 10 + 'A', FontSize, Inverted);
+        if (SingleNumber < 10) EPD_ShowChar(X + i * EPD_FontWidth(FontSize), Y, SingleNumber + '0', FontSize, Inverted);
+        else                   EPD_ShowChar(X + i * EPD_FontWidth(FontSize), Y, SingleNumber - 10 + 'A', FontSize, Inverted);
     }
 }
 
@@ -533,7 +579,7 @@ void EPD_ShowBinNum(int16_t X, int16_t Y, uint32_t Number, uint8_t Length, uint8
 {
     uint8_t i;
     for (i = 0; i < Length; i++)
-        EPD_ShowChar(X + i * FontSize, Y, Number / EPD_Pow(2, Length - i - 1) % 2 + '0', FontSize, Inverted);
+        EPD_ShowChar(X + i * EPD_FontWidth(FontSize), Y, Number / EPD_Pow(2, Length - i - 1) % 2 + '0', FontSize, Inverted);
 }
 
 void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, uint8_t FraLength, uint8_t FontSize, uint8_t Inverted)
@@ -546,9 +592,9 @@ void EPD_ShowFloatNum(int16_t X, int16_t Y, double Number, uint8_t IntLength, ui
     PowNum = EPD_Pow(10, FraLength);
     FraNum = round(Number * PowNum);
     IntNum += FraNum / PowNum;
-    EPD_ShowNum(X + FontSize, Y, IntNum, IntLength, FontSize, Inverted);
-    EPD_ShowChar(X + (IntLength + 1) * FontSize, Y, '.', FontSize, Inverted);
-    EPD_ShowNum(X + (IntLength + 2) * FontSize, Y, FraNum, FraLength, FontSize, Inverted);
+    EPD_ShowNum(X + EPD_FontWidth(FontSize), Y, IntNum, IntLength, FontSize, Inverted);
+    EPD_ShowChar(X + (IntLength + 1) * EPD_FontWidth(FontSize), Y, '.', FontSize, Inverted);
+    EPD_ShowNum(X + (IntLength + 2) * EPD_FontWidth(FontSize), Y, FraNum, FraLength, FontSize, Inverted);
 }
 
 void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const uint8_t *Image)
@@ -558,7 +604,7 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
     uint8_t byteIndex, bitIndex, pixel;
     uint16_t bytesPerLine = (Width + 7) / 8;
 
-    /* å…ˆé“ºç™½åº• */
+    /* ÏÈÆÌ°×µ× */
     for (j = 0; j < Height; j++) {
         for (i = 0; i < Width; i++) {
             if (EPD_IsInLogicRange(X + i, Y + j)) {
@@ -572,7 +618,7 @@ void EPD_ShowImage(int16_t X, int16_t Y, uint8_t Width, uint8_t Height, const ui
         }
     }
 
-    /* ç”»å›¾ */
+    /* »­Í¼ */
     for (j = 0; j < Height; j++) {
         for (i = 0; i < Width; i++) {
             if (EPD_IsInLogicRange(X + i, Y + j)) {
@@ -599,7 +645,7 @@ void EPD_Printf(int16_t X, int16_t Y, uint8_t FontSize, uint8_t Inverted, char *
     EPD_ShowString(X, Y, String, FontSize, Inverted);
 }
 
-/* ==================== ç”»ç‚¹ ==================== */
+/* ==================== »­µã ==================== */
 void EPD_DrawPoint(int16_t X, int16_t Y)
 {
     int16_t physX, physY;
@@ -646,7 +692,7 @@ uint8_t EPD_GetPoint(int16_t X, int16_t Y)
     return 0;
 }
 
-/* ==================== ç”»çº¿ ==================== */
+/* ==================== »­Ïß ==================== */
 void EPD_DrawLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
 {
     int16_t x, y, dx, dy, d, incrE, incrNE, temp;
@@ -754,7 +800,7 @@ void EPD_DrawDashedLine(int16_t X0, int16_t Y0, int16_t X1, int16_t Y1)
     }
 }
 
-/* ==================== çŸ©å½¢ / ä¸‰è§’å½¢ / åœ† / å¼§ ==================== */
+/* ==================== ¾ØĞÎ / Èı½ÇĞÎ / Ô² / »¡ ==================== */
 void EPD_DrawRectangle(int16_t X, int16_t Y, uint16_t Width, uint16_t Height, uint8_t IsFilled)
 {
     int16_t i, j;
@@ -883,7 +929,7 @@ void EPD_DrawArc(int16_t X, int16_t Y, uint8_t Radius, int16_t StartAngle, int16
     }
 }
 
-/* ==================== æµ‹è¯•å›¾ ==================== */
+/* ==================== ²âÊÔÍ¼ ==================== */
 void EPD_TestPattern(void)
 {
     uint16_t i;
