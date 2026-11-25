@@ -32,9 +32,9 @@ extern "C" {
 
 /* ========================= 引脚定义 ========================= */
 
-#define BSP_GT30L32S4W_SCLK_PIN          22
+#define BSP_GT30L32S4W_SCLK_PIN          26
 #define BSP_GT30L32S4W_CS_PIN            23
-#define BSP_GT30L32S4W_MOSI_PIN          21
+#define BSP_GT30L32S4W_MOSI_PIN          25
 #define BSP_GT30L32S4W_MISO_PIN          35
 
 /*
