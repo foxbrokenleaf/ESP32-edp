@@ -39,6 +39,10 @@
  *   2. 内部扩展字库（拼音 AAA1~ABC0 / 扩展汉字等）厂商未公开地址表，
  *      本驱动不内置；可自行用 GT30L32S4W_ReadRaw() 按需读取。
  *   3. 显示函数依赖同目录 EPD.c 的 EPD_DrawPoint / EPD_ClearPoint。
+ *   4. 芯片不在线时（自检失败）自动改用内置字模子集 font_fallback.c：
+ *      子集由 tools/gen_font_fallback.py 从 datasheet/GT30L32S4W.bin 抽取，
+ *      覆盖工程实际用到的 ASCII(0x20~0x7E) + GUI 里的全部汉字。
+ *      新增显示文字后请重新生成：python tools/gen_font_fallback.py
  */
 
 #ifndef __GT30L32S4W_H__

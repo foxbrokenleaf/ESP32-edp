@@ -13,8 +13,28 @@
 #include "bsp_GT30L32S4W.h"
 #include "GT30L32S4W.h"
 #include "EPD.h"
+#include "font_fallback.h"
 
 static const char *TAG = "GT30L32S4W_APP";
+
+/* ========================= 内置字模回退 ========================= */
+
+/*
+ * s_chip_state：
+ *    0 = 尚未判定（先读芯片，读失败再回退）
+ *    1 = 芯片在线（正常路径，速度最快）
+ *   -1 = 芯片不在线（全部走内置子集，避免每个字都白跑一次位操作 SPI）
+ */
+static int s_chip_state = 0;
+
+/*
+ * 芯片直读通道（不回退）：
+ * 自检必须走这条通道，否则内置字模会让自检"假通过"，把硬件问题掩盖掉。
+ */
+static esp_err_t gt_chip_read_ascii_record(gt30l32s4w_font_t font, char c,
+                                           uint8_t *buf, size_t buf_size);
+static esp_err_t gt_chip_read_gb_record(gt30l32s4w_font_t font, uint16_t gb_code,
+                                        uint8_t *buf, size_t buf_size);
 
 /* ========================= 字库�? ========================= */
 
@@ -137,13 +157,12 @@ static void gt_log_dump(const char *title, const uint8_t *data, size_t len)
     ESP_LOGE(TAG, "%s", line);
 }
 
-esp_err_t GT30L32S4W_SelfTest(void)
+static esp_err_t gt_self_test_chip(void)
 {
     uint8_t buf[GT30L32S4W_GLYPH_MAX_BYTES];
-    uint16_t advance = 0;
 
-    esp_err_t err = GT30L32S4W_ReadAscii(GT30L32S4W_FONT_ASCII_8X16, 'A',
-                                        buf, sizeof(buf), &advance);
+    esp_err_t err = gt_chip_read_ascii_record(GT30L32S4W_FONT_ASCII_8X16, 'A',
+                                              buf, sizeof(buf));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "self test: read ascii failed: %s", esp_err_to_name(err));
         return err;
@@ -155,8 +174,8 @@ esp_err_t GT30L32S4W_SelfTest(void)
     }
 
     /* GB2312 16x16 �? "�?" (0xB0A1) �? 4 字节 */
-    err = GT30L32S4W_ReadGb2312(GT30L32S4W_FONT_GB2312_16X16, 0xB0A1,
-                               buf, sizeof(buf));
+    err = gt_chip_read_gb_record(GT30L32S4W_FONT_GB2312_16X16, 0xB0A1,
+                                 buf, sizeof(buf));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "self test: read gb2312 failed: %s", esp_err_to_name(err));
         return err;
@@ -168,6 +187,30 @@ esp_err_t GT30L32S4W_SelfTest(void)
 
     ESP_LOGI(TAG, "self test passed, spi clock=%" PRIu32 "Hz", bsp_gt30l32s4w_get_clock_hz());
     return ESP_OK;
+}
+
+/**
+ * @brief  自检：先判定字库芯片是否在线，再决定走芯片还是内置子集
+ * @note   自检失败不代表显示不可用——内置子集覆盖了工程用到的字符时，
+ *         显示照常工作，只是提示用户去查硬件（供电 / HOLD# / 走线）。
+ */
+esp_err_t GT30L32S4W_SelfTest(void)
+{
+    esp_err_t err = gt_self_test_chip();
+
+    if (err == ESP_OK) {
+        s_chip_state = 1;
+        return ESP_OK;
+    }
+
+    s_chip_state = -1;
+    if (FontFallback_GlyphCount() > 0) {
+        ESP_LOGW(TAG, "字库芯片不可用（%s），改用内置字模子集：%u 个字形",
+                 esp_err_to_name(err), (unsigned)FontFallback_GlyphCount());
+    } else {
+        ESP_LOGE(TAG, "字库芯片不可用（%s），且没有内置字模子集", esp_err_to_name(err));
+    }
+    return err;
 }
 
 /* ========================= 字库信息 / 取字�? ========================= */
@@ -189,6 +232,59 @@ esp_err_t GT30L32S4W_GetFontInfo(gt30l32s4w_font_t font, gt30l32s4w_font_info_t 
     return ESP_OK;
 }
 
+/* 芯片直读：ASCII（地址 = 基址 + (字符 - 0x20) * 记录长度） */
+static esp_err_t gt_chip_read_ascii_record(gt30l32s4w_font_t font, char c,
+                                           uint8_t *buf, size_t buf_size)
+{
+    if (buf == NULL || !gt_font_is_ascii(font)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const gt_font_record_t *f = &s_font_table[font];
+    if (buf_size < f->record_size) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    uint8_t ch = (uint8_t)c;
+    if (ch < GT_ASCII_FIRST_CHAR || ch > (GT_ASCII_FIRST_CHAR + GT_ASCII_CHAR_COUNT - 1)) {
+        ch = '?';   /* 不可显示字符统一取 '?'，避免取到界外数据 */
+    }
+
+    uint32_t addr = f->base_addr + (uint32_t)(ch - GT_ASCII_FIRST_CHAR) * f->record_size;
+    esp_err_t err = bsp_gt30l32s4w_read(addr, buf, f->record_size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "read ascii 0x%02X @0x%06" PRIx32 " failed: %s",
+                 ch, addr, esp_err_to_name(err));
+    }
+    return err;
+}
+
+/**
+ * @brief  记录头里的字宽 -> 步进宽度（只有不等宽字体才有 2 字节宽度头）
+ */
+static uint16_t gt_record_advance(const gt_font_record_t *f, const uint8_t *buf)
+{
+    if (f->header_size >= 2) {
+        uint16_t adv = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
+        if (adv != 0 && adv <= f->width) {
+            return adv;
+        }
+    }
+    return f->width;
+}
+
+/* 内置子集缺字形时只提示有限次数，避免刷屏 */
+static void gt_fallback_missing(gt30l32s4w_font_t font, uint16_t code)
+{
+    static uint8_t s_missing_logged = 0;
+
+    if (s_missing_logged < 8) {
+        s_missing_logged++;
+        ESP_LOGW(TAG, "内置字模缺少字形: font=%d code=0x%04X（重新生成: python tools/gen_font_fallback.py）",
+                 (int)font, (unsigned)code);
+    }
+}
+
 esp_err_t GT30L32S4W_ReadAscii(gt30l32s4w_font_t font, char c,
                                uint8_t *buf, size_t buf_size, uint16_t *advance)
 {
@@ -203,33 +299,31 @@ esp_err_t GT30L32S4W_ReadAscii(gt30l32s4w_font_t font, char c,
 
     uint8_t ch = (uint8_t)c;
     if (ch < GT_ASCII_FIRST_CHAR || ch > (GT_ASCII_FIRST_CHAR + GT_ASCII_CHAR_COUNT - 1)) {
-        ch = '?';   /* 不可显示字�?�统一�? '?'，避免取到界外数�? */
+        ch = '?';
     }
 
-    uint32_t addr = f->base_addr + (uint32_t)(ch - GT_ASCII_FIRST_CHAR) * f->record_size;
-    esp_err_t err = bsp_gt30l32s4w_read(addr, buf, f->record_size);
+    /* 芯片在线就读芯片；已判定离线则直接读内置子集，省掉一次空转 SPI */
+    esp_err_t err = ESP_FAIL;
+    if (s_chip_state >= 0) {
+        err = gt_chip_read_ascii_record(font, (char)ch, buf, buf_size);
+    }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "read ascii 0x%02X @0x%06" PRIx32 " failed: %s",
-                 ch, addr, esp_err_to_name(err));
-        return err;
+        if (FontFallback_ReadAscii(font, ch, buf, buf_size) == ESP_OK) {
+            err = ESP_OK;
+        } else {
+            gt_fallback_missing(font, ch);
+        }
     }
 
-    if (advance != NULL) {
-        uint16_t adv = f->width;
-        if (f->header_size >= 2) {
-            /* 不等宽字体：记录�? 2 字节大�??字�?? */
-            adv = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
-            if (adv == 0 || adv > f->width) {
-                adv = f->width;
-            }
-        }
-        *advance = adv;
+    if (err == ESP_OK && advance != NULL) {
+        *advance = gt_record_advance(f, buf);
     }
-    return ESP_OK;
+    return err;
 }
 
-esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
-                                uint8_t *buf, size_t buf_size)
+/* 芯片直读：GB2312/特殊字符（地址 = 基址 + 索引 * 记录长度） */
+static esp_err_t gt_chip_read_gb_record(gt30l32s4w_font_t font, uint16_t gb_code,
+                                        uint8_t *buf, size_t buf_size)
 {
     if (buf == NULL || !gt_font_is_gb(font)) {
         return ESP_ERR_INVALID_ARG;
@@ -242,7 +336,7 @@ esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
 
     uint16_t index = 0;
     if (font == GT30L32S4W_FONT_GB_SPEC_8X16) {
-        /* 特殊字�?�：0xACA1~0xACDF 顺序排列 */
+        /* 特殊字符：0xACA1~0xACDF 顺序排列 */
         if (gb_code < 0xACA1 || gb_code > 0xACDF) {
             return ESP_ERR_INVALID_ARG;
         }
@@ -266,8 +360,37 @@ esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
     return err;
 }
 
+esp_err_t GT30L32S4W_ReadGb2312(gt30l32s4w_font_t font, uint16_t gb_code,
+                                uint8_t *buf, size_t buf_size)
+{
+    if (buf == NULL || !gt_font_is_gb(font)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const gt_font_record_t *f = &s_font_table[font];
+    if (buf_size < f->record_size) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    esp_err_t err = ESP_FAIL;
+    if (s_chip_state >= 0) {
+        err = gt_chip_read_gb_record(font, gb_code, buf, buf_size);
+    }
+    if (err != ESP_OK) {
+        if (FontFallback_ReadGbk(font, gb_code, buf, buf_size) == ESP_OK) {
+            err = ESP_OK;
+        } else {
+            gt_fallback_missing(font, gb_code);
+        }
+    }
+    return err;
+}
+
 /**
- * @brief 直接读取�?片原始数�?（扩展字�? / 图片字模等）
+ * @brief  直接读取芯片原始数据（扩展字库 / 图片字模等，只能走芯片）
+ * @param  addr 字库 24 位地址
+ * @param  buf  输出缓冲
+ * @param  len  字节数
  */
 esp_err_t GT30L32S4W_ReadRaw(uint32_t addr, void *buf, size_t len)
 {
