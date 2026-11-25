@@ -20,7 +20,6 @@
 #include "bsp_rtc.h"
 #include "bsp_http.h"
 #include "GT30L32S4W.h"
-#include "font_fallback.h"
 #include "bsp_GT30L32S4W.h"
 #include "bsp_key.h"
 
@@ -67,7 +66,7 @@ void app_main(void)
     /*
      * 上电自检：读回已知字模与参考数据比较。
      * 失败说明字库芯片未接好/引脚定义不对（供电、HOLD#、走线…），
-     * 此时自动改用内置字模子集继续运行，屏幕上给出提示，便于脱离串口定位。
+     * 屏幕上给出提示，便于脱离串口定位。
      */
     err = GT30L32S4W_SelfTest();
     if (err != ESP_OK) {
@@ -86,18 +85,7 @@ void app_main(void)
         (void)bsp_gt30l32s4w_pin_toggle_test(BSP_GT30L32S4W_FAIL_TOGGLE_MS);
 #endif
 
-        if (FontFallback_HasFont(GT30L32S4W_FONT_ASCII_8X16)) {
-            ESP_LOGW(TAG, "改用内置字模子集运行（%u 个字形）",
-                     (unsigned)FontFallback_GlyphCount());
-
-            char line1[] = "FONT CHIP OFF";
-            char line2[] = "USE EMBEDDED FONT";
-            EPD_Clear();
-            EPD_ShowString(0, 0, line1, EPD_8X16, 0);
-            EPD_ShowString(0, 24, line2, EPD_8X16, 0);
-            EPD_Update();
-            vTaskDelay(pdMS_TO_TICKS(3000));
-        } else {
+        {
             char line1[] = "FONT ERROR";
             char line2[] = "CLK26 SI25 CS23 SO35";
             EPD_Clear();
