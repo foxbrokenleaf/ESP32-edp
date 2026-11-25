@@ -275,6 +275,8 @@ void EPD_Update(void)
 {
     uint16_t i, j;
 
+    EPD_GPIO_Init();
+
     EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_BW);
     for (i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
         for (j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
