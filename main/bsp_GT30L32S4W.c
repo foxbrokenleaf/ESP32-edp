@@ -801,20 +801,25 @@ esp_err_t bsp_gt30l32s4w_pin_toggle_test(uint32_t duration_ms)
  */
 #define GT_PROBE_CLOCKS   64
 
-/* 可能作为 MISO 的引脚（避开 flash 6~11、UART 1/3、EPD 的 4/13/14/25/26/27、strapping 12） */
+/* 可能作为 MISO 的引脚（避开 flash 6~11、UART 1/3、EPD 的 4/13/14/25/26/27、
+ * strapping 12、语音芯片 BUSY=32） */
 static const uint8_t s_probe_miso_pins[] = {
-    35, 34, 39, 36, 37, 38, 32, 33, 19, 18, 5, 2, 0, 15, 16, 17,
+    35, 34, 39, 36, 37, 38, 33, 19, 18, 5, 2, 0, 15, 16, 17,
 };
 
-/* 可能作为 CS 的引脚（避开 flash/UART/EPD 引脚、字库 SCLK=26、strapping 12） */
+/* 可能作为 CS 的引脚（避开 flash/UART/EPD 引脚、字库 SCLK=26、strapping 12、
+ * 语音芯片 CS=21 / BUSY=32） */
 static const uint8_t s_probe_cs_pins[] = {
-    23, 32, 33, 19, 18, 5, 2, 0, 15, 16, 17,
+    23, 33, 19, 18, 5, 2, 0, 15, 16, 17,
 };
 
-/* 可能的 SCLK/SI 组合：字库实际使用的 26/25，以及早期误判的 22/21 */
+/*
+ * 可能的 SCLK/SI 组合：只剩字库实际使用的 26/25。
+ * 早期误判的 22/21 已删掉：21 现在是 WT588F 的 CS 门控，探测时把它驱动成高会
+ * 打开语音芯片的门控，而探测又在 26/25 上打时钟，会灌进垃圾数据（随机播放）。
+ */
 static const uint8_t s_probe_clk_pins[][2] = {
     { BSP_GT30L32S4W_SCLK_PIN, BSP_GT30L32S4W_MOSI_PIN },
-    { 22, 21 },
 };
 
 #define GT_PROBE_MISO_NUM  (sizeof(s_probe_miso_pins) / sizeof(s_probe_miso_pins[0]))
@@ -824,11 +829,12 @@ static const uint8_t s_probe_clk_pins[][2] = {
 #if BSP_GT30L32S4W_PROBE_FULL_SCAN
 /*
  * 全组合扫描用的引脚集合（未被本工程占用的普通 GPIO）。
- * 特意避开 16/17（WROVER 模块上是 PSRAM 的 CS/CLK）。
+ * 特意避开 16/17（WROVER 模块上是 PSRAM 的 CS/CLK）、21/32（WT588F 的 CS 门控 /
+ * BUSY：把 21 当 CS 拉高会打开语音芯片门控，扫描时钟会灌进去造成随机播放）。
  * SCLK/SI/CS 任取其中 3 个，遍历所有排列，只在前面都失败时才跑。
  */
 static const uint8_t s_probe_bus_pins[] = {
-    0, 2, 5, 15, 18, 19, 21, 22, 23, 32, 33,
+    0, 2, 5, 15, 18, 19, 22, 23, 33,
 };
 #define GT_PROBE_BUS_NUM   (sizeof(s_probe_bus_pins) / sizeof(s_probe_bus_pins[0]))
 #endif

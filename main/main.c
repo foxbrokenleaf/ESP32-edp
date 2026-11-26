@@ -21,9 +21,18 @@
 #include "bsp_http.h"
 #include "GT30L32S4W.h"
 #include "bsp_GT30L32S4W.h"
+#include "WT588F.h"
 #include "bsp_key.h"
 
 static const char *TAG = "MAIN";
+
+/*
+ * 语音芯片上电验证：1 = 初始化成功后自动播一段并把 BUSY 变化打到串口，
+ * 确认能出声后改成 0（避免每次重启都响）。
+ */
+#define APP_VOICE_BOOT_TEST     1
+/* 语音工程里要播的段地址，按实际工程改（单字节 0~223 / 双字节 0~999） */
+#define APP_VOICE_TEST_ADDR     1
 
 void SW3_Key(bsp_key_event_t event, void *user_ctx);
 void SW2_Key(bsp_key_event_t event, void *user_ctx);
@@ -46,6 +55,38 @@ static void App_NvsInit(void)
         ESP_LOGI(TAG, "nvs ok");
     }
 }
+
+#if APP_VOICE_BOOT_TEST
+/**
+ * @brief 语音芯片验证：发一段码，并观察 BUSY 有没有反应
+ *
+ * 日志能区分三种故障，比"没声音"好定位：
+ *   1) play 返回错误                -> 地址超出当前发码方式（改地址或 AddressMode）
+ *   2) play 成功但 BUSY 始终空闲     -> 芯片没收到：查一线/两线配置、门控电平(≈2.6V)
+ *   3) BUSY 变忙                     -> 芯片已在播，无声就查功放/喇叭
+ */
+static void App_VoiceTest(void)
+{
+    if (!WT588F_IsReady()) {
+        return;
+    }
+
+    esp_err_t err = WT588F_Play(APP_VOICE_TEST_ADDR);
+    ESP_LOGI(TAG, "voice: play %d -> %s", APP_VOICE_TEST_ADDR, esp_err_to_name(err));
+    if (err != ESP_OK) {
+        return;
+    }
+
+    for (int i = 0; i < 20; i++) {          /* 2s 内采样 BUSY，看芯片有没有响应 */
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (WT588F_IsBusy()) {
+            ESP_LOGI(TAG, "voice: BUSY asserted after %dms, ok", (i + 1) * 100);
+            return;
+        }
+    }
+    ESP_LOGW(TAG, "voice: BUSY always idle, chip may not receive (check wire mode / gate level)");
+}
+#endif /* APP_VOICE_BOOT_TEST */
 
 void app_main(void)
 {
@@ -100,9 +141,23 @@ void app_main(void)
 
     bsp_rtc_init();
 
-
-
-    
+    /*
+     * 语音芯片：上电默认一线串口 + 单字节发码（必须与语音工程烧写时的设定一致，
+     * 不一致时用 WT588F_SetWireMode()/WT588F_SetAddressMode() 改）。
+     * 没接芯片时只打告警，不影响其它功能。
+     * 用法：WT588F_Play(段地址);            // 立即返回
+     *       WT588F_SetVolume(0~15);
+     *       WT588F_PlayAndWait(段地址, 5000); // 等播完，需要 BUSY 接线
+     */
+    err = WT588F_Init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WT588F init failed: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "WT588F init ok");
+#if APP_VOICE_BOOT_TEST
+        App_VoiceTest();
+#endif
+    }
 
     ESP_LOGI(TAG, "wifi init");
     WiFi_Init();
@@ -127,7 +182,16 @@ void SW3_Key(bsp_key_event_t event, void *user_ctx){
 }
 
 void SW2_Key(bsp_key_event_t event, void *user_ctx){
-    ESP_LOGI(TAG, "SW2_Key");    
+    ESP_LOGI(TAG, "SW2_Key");
+
+    /*
+     * 按键播一段：顺带验证“在别的任务里发码”也安全
+     * （语音 BSP 内部有互斥锁，一帧约 13ms 忙等，占住扫描任务的时间可接受）。
+     */
+    esp_err_t err = WT588F_Play(APP_VOICE_TEST_ADDR);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "voice: play %d failed: %s", APP_VOICE_TEST_ADDR, esp_err_to_name(err));
+    }
 }
 
 void SW1_Key(bsp_key_event_t event, void *user_ctx){

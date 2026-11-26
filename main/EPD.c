@@ -43,6 +43,27 @@
 #define EPD_BUSY_FIXED_DELAY_MS         6000
 
 /* ==================== 显存（物理布局，[296][19]） ==================== */
+/* ==================== display polarity ==================== */
+/*
+ * Framebuffer convention: bit = 1 -> white, bit = 0 -> black
+ *   (EPD_Clear() fills 0xFF, EPD_DrawPoint() clears the bit,
+ *    EPD_GetPoint() returns 1 for white).
+ *
+ * Some 2.9" UC8151 panels / batches have the opposite DT1 (0x10) plane
+ * polarity: the whole screen comes out inverted (black background, white
+ * glyphs).  EPD_DISPLAY_INVERT = 1 XORs every byte only while writing the
+ * image RAM, so the framebuffer and every drawing API keep their meaning.
+ */
+#define EPD_DISPLAY_INVERT              1
+
+/*
+ * Byte written to the second-colour plane (0x13):
+ *   0x00 = fill the panel second colour everywhere (red/yellow on a 3- or
+ *          4-colour panel, ignored by a plain B/W panel);
+ *   0xFF = leave the second plane empty (always safe for B/W panels).
+ */
+#define EPD_RW_PLANE_FILL               0x00
+
 static uint8_t EPD_DisplayBuf[EPD_PHYSICAL_HEIGHT][EPD_PHYSICAL_COLUMN_BYTES];
 
 /* ==================== 延时（ESP-IDF） ==================== */
@@ -274,18 +295,19 @@ void EPD_Init(void)
 void EPD_Update(void)
 {
     uint16_t i, j;
+    const uint8_t invert = EPD_DISPLAY_INVERT ? 0xFF : 0x00;
 
     EPD_GPIO_Init();
 
     EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_BW);
     for (i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
         for (j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
-            EPD_WriteData(EPD_DisplayBuf[i][j]);
+            EPD_WriteData(EPD_DisplayBuf[i][j] ^ invert);
 
     EPD_WriteCommand(EPD_CMD_WRITE_IMAGE_RAM_RW);
     for (i = 0; i < EPD_PHYSICAL_HEIGHT; i++)
         for (j = 0; j < EPD_PHYSICAL_COLUMN_BYTES; j++)
-            EPD_WriteData(0x00);
+            EPD_WriteData(EPD_RW_PLANE_FILL);
 
     EPD_WriteCommand(EPD_CMD_POWER_ON);
 #if EPD_BUSY_CONNECTED
