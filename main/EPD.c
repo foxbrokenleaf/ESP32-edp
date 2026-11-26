@@ -11,7 +11,7 @@
 #include "esp_rom_sys.h"
 
 /* ==================== 引脚定义（按实际接线修改） ==================== */
-#define EPD_BUSY_PIN    4
+#define EPD_BUSY_PIN    33
 #define EPD_RST_PIN     13
 #define EPD_DC_PIN      14
 #define EPD_CS_PIN      27
@@ -33,7 +33,7 @@
 
 /* ==================== BUSY 处理 ==================== */
 /* BUSY 是否接到 MCU：1=轮询 BUSY 引脚（最准），0=用固定延时 */
-#define EPD_BUSY_CONNECTED              0
+#define EPD_BUSY_CONNECTED              1
 
 /* BUSY 未接 MCU 时刷新后的固定等待时间（ms）
  * 全刷 296x152 约需 2.5~3s（25℃），低温可达 10s 以上。
@@ -54,7 +54,7 @@
  * glyphs).  EPD_DISPLAY_INVERT = 1 XORs every byte only while writing the
  * image RAM, so the framebuffer and every drawing API keep their meaning.
  */
-#define EPD_DISPLAY_INVERT              1
+#define EPD_DISPLAY_INVERT              0
 
 /*
  * Byte written to the second-colour plane (0x13):

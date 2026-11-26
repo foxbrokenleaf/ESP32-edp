@@ -23,14 +23,18 @@
 #include "bsp_GT30L32S4W.h"
 #include "WT588F.h"
 #include "bsp_key.h"
+#include "app_selftest.h"
 
 static const char *TAG = "MAIN";
 
 /*
- * 语音芯片上电验证：1 = 初始化成功后自动播一段并把 BUSY 变化打到串口，
- * 确认能出声后改成 0（避免每次重启都响）。
+ * 上电整机自检（NVS / 字库 / EPD / 语音 / 按键 / RTC）：
+ *   1 = 开机跑一次，串口打表格 + 墨水屏出结果页（语音项会真的播一段）；
+ *   0 = 关闭，开机直接进业务。
+ * 单项开关在 app_selftest.h 里（APP_SELFTEST_TEST_xxx）。
  */
-#define APP_VOICE_BOOT_TEST     1
+#define APP_SELFTEST_BOOT       1
+
 /* 语音工程里要播的段地址，按实际工程改（单字节 0~223 / 双字节 0~999） */
 #define APP_VOICE_TEST_ADDR     1
 
@@ -56,37 +60,7 @@ static void App_NvsInit(void)
     }
 }
 
-#if APP_VOICE_BOOT_TEST
-/**
- * @brief 语音芯片验证：发一段码，并观察 BUSY 有没有反应
- *
- * 日志能区分三种故障，比"没声音"好定位：
- *   1) play 返回错误                -> 地址超出当前发码方式（改地址或 AddressMode）
- *   2) play 成功但 BUSY 始终空闲     -> 芯片没收到：查一线/两线配置、门控电平(≈2.6V)
- *   3) BUSY 变忙                     -> 芯片已在播，无声就查功放/喇叭
- */
-static void App_VoiceTest(void)
-{
-    if (!WT588F_IsReady()) {
-        return;
-    }
-
-    esp_err_t err = WT588F_Play(APP_VOICE_TEST_ADDR);
-    ESP_LOGI(TAG, "voice: play %d -> %s", APP_VOICE_TEST_ADDR, esp_err_to_name(err));
-    if (err != ESP_OK) {
-        return;
-    }
-
-    for (int i = 0; i < 20; i++) {          /* 2s 内采样 BUSY，看芯片有没有响应 */
-        vTaskDelay(pdMS_TO_TICKS(100));
-        if (WT588F_IsBusy()) {
-            ESP_LOGI(TAG, "voice: BUSY asserted after %dms, ok", (i + 1) * 100);
-            return;
-        }
-    }
-    ESP_LOGW(TAG, "voice: BUSY always idle, chip may not receive (check wire mode / gate level)");
-}
-#endif /* APP_VOICE_BOOT_TEST */
+/* 语音的上电验证已并入整机自检（app_selftest.c 的 VOICE 项），此处不再单独实现 */
 
 void app_main(void)
 {
@@ -99,17 +73,9 @@ void app_main(void)
     bsp_key_start(34, SW1_Key, BSP_KEY_EVENT_PRESS);
 
     esp_err_t err = GT30L32S4W_Init();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "GT30L32S4W init failed: %s", esp_err_to_name(err));
-        return;
+    if (err == ESP_OK) {
+        err = GT30L32S4W_SelfTest();
     }
-
-    /*
-     * 上电自检：读回已知字模与参考数据比较。
-     * 失败说明字库芯片未接好/引脚定义不对（供电、HOLD#、走线…），
-     * 屏幕上给出提示，便于脱离串口定位。
-     */
-    err = GT30L32S4W_SelfTest();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "GT30L32S4W self test failed: %s", esp_err_to_name(err));
 
@@ -121,20 +87,13 @@ void app_main(void)
          * 示波器挂在 GPIO23(CS#) 上、下降沿触发、1ms/div 就能确认
          * MCU 是否真的在片选（有波形 = MCU 在驱动，无波形 = 引脚没通/被别处占用）。
          * 时长由 BSP_GT30L32S4W_FAIL_TOGGLE_MS 控制，改成 0 可关闭。
+         *
+         * 这里不再单独刷屏/等待：字库失败会由下面的整机自检结果页
+         * （FONT FAIL）统一显示，避免一上电连刷两次屏。
          */
 #if (BSP_GT30L32S4W_FAIL_TOGGLE_MS > 0)
         (void)bsp_gt30l32s4w_pin_toggle_test(BSP_GT30L32S4W_FAIL_TOGGLE_MS);
 #endif
-
-        {
-            char line1[] = "FONT ERROR";
-            char line2[] = "CLK26 SI25 CS23 SO35";
-            EPD_Clear();
-            EPD_ShowString(0, 0, line1, EPD_8X16, 0);
-            EPD_ShowString(0, 24, line2, EPD_8X16, 0);
-            EPD_Update();
-            vTaskDelay(pdMS_TO_TICKS(10000));
-        }
     } else {
         ESP_LOGI(TAG, "GT30L32S4W self test OK");
     }
@@ -154,10 +113,18 @@ void app_main(void)
         ESP_LOGW(TAG, "WT588F init failed: %s", esp_err_to_name(err));
     } else {
         ESP_LOGI(TAG, "WT588F init ok");
-#if APP_VOICE_BOOT_TEST
-        App_VoiceTest();
-#endif
     }
+
+#if APP_SELFTEST_BOOT
+    /*
+     * 整机自检：串口打表格 + 墨水屏出结果页。
+     * 语音项会真的播一段（APP_SELFTEST_VOICE_ADDR），并采样 BUSY 判断芯片是否响应：
+     *   PASS 但没声音   -> 查功放/喇叭；
+     *   FAIL(no busy)  -> 查一线/两线设定、门控电平（AU_CLK_O ≈2.6V）、CS 脚。
+     * 自检内部的字库/语音/EPD 调用是顺序执行的，不会在共用总线（GPIO26/25）上打架。
+     */
+    (void)app_selftest_run_and_show(NULL);
+#endif
 
     ESP_LOGI(TAG, "wifi init");
     WiFi_Init();

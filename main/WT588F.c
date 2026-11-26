@@ -16,6 +16,9 @@
  * 这里的每条指令由一帧或两帧组成，直接连着发即可。
  */
 
+#include <stdio.h>
+#include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -358,6 +361,93 @@ esp_err_t WT588F_ReadInfo(wt588f_info_t type, uint8_t *buf, size_t buf_size,
         err = end_err;
     }
     return err;
+}
+
+/* ========================= 自检（F9 工程信息回读） ========================= */
+
+void WT588F_InfoToText(const uint8_t *buf, size_t len, char *out, size_t out_size)
+{
+    if (out == NULL || out_size == 0) {
+        return;
+    }
+    if (buf == NULL) {
+        out[0] = '\0';
+        return;
+    }
+
+    size_t n = (len < out_size - 1) ? len : (out_size - 1);
+    for (size_t i = 0; i < n; i++) {
+        uint8_t c = buf[i];
+        out[i] = (c >= 0x20 && c < 0x7F) ? (char)c : '.';
+    }
+    out[n] = '\0';
+}
+
+esp_err_t WT588F_SelfTest(wt588f_selftest_t *result)
+{
+    if (!s_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (result == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(result, 0, sizeof(*result));
+
+    /* F9 只有在空闲状态才有效：先把上一段语音的尾巴等干净 */
+    esp_err_t wait = WT588F_WaitIdle(WT588F_SELFTEST_IDLE_TIMEOUT_MS);
+    if (wait != ESP_OK && wait != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW(TAG, "selftest: chip still busy (%s), F9 may be ignored",
+                 esp_err_to_name(wait));
+    }
+
+    struct info_req {
+        wt588f_info_t type;
+        const char   *name;
+        uint8_t      *buf;
+        size_t       *len;
+    } req[3] = {
+        { WT588F_INFO_MAIN_PROGRAM, "main program", result->main_program, &result->main_program_len },
+        { WT588F_INFO_PROJECT_NO,   "project no",   result->project_no,   &result->project_no_len   },
+        { WT588F_INFO_VERSION_NO,   "version no",   result->version_no,   &result->version_no_len   },
+    };
+
+    esp_err_t first_err = ESP_OK;
+
+    for (int i = 0; i < 3; i++) {
+        esp_err_t err = WT588F_ReadInfo(req[i].type, req[i].buf, WT588F_INFO_TEXT_MAX,
+                                        req[i].len, WT588F_SELFTEST_INFO_GAP_MS);
+        if (err == ESP_OK) {
+            /* 同时给文本和原始字节：编号在多数工程里是 ASCII（如 "9F2C"），
+             * 少数工程直接回二进制，那就只能看 hex */
+            char   text[WT588F_INFO_TEXT_MAX];
+            char   hex[3 * 8 + 1];
+            size_t n   = (*req[i].len < 8) ? *req[i].len : 8;
+            size_t pos = 0;
+
+            WT588F_InfoToText(req[i].buf, *req[i].len, text, sizeof(text));
+            hex[0] = '\0';
+            for (size_t k = 0; k < n && (sizeof(hex) - pos) > 3; k++) {
+                pos += (size_t)snprintf(hex + pos, sizeof(hex) - pos, "%02X ", req[i].buf[k]);
+            }
+            ESP_LOGI(TAG, "selftest: %s = \"%s\" [%s](%u byte)", req[i].name, text, hex,
+                     (unsigned)*req[i].len);
+            continue;
+        }
+
+        ESP_LOGW(TAG, "selftest: %s read failed: %s", req[i].name, esp_err_to_name(err));
+        if (i == 0 && first_err == ESP_OK) {
+            first_err = err;        /* 主控程序编号读不到 = 芯片不回话 */
+            if (err == ESP_ERR_NOT_SUPPORTED) {
+                break;              /* BUSY 没接，后面两项也不可能成功 */
+            }
+        }
+    }
+
+    if (first_err == ESP_OK) {
+        ESP_LOGI(TAG, "selftest: info readback ok (chip online)");
+    }
+    return first_err;
 }
 
 /* ========================= 原始指令 ========================= */

@@ -239,6 +239,70 @@ esp_err_t WT588F_PlayAndWait(uint16_t addr, uint32_t timeout_ms);
 esp_err_t WT588F_ReadInfo(wt588f_info_t type, uint8_t *buf, size_t buf_size,
                           size_t *out_len, uint32_t gap_ms);
 
+/* ========================= 自检（F9 工程信息回读） ========================= */
+
+/*
+ * 规格书第 8 章：发 F9H + 子命令后，芯片把信息以 9600 8N1 从 BUSY(PIN 1) 回传，
+ * 指令只有在空闲状态下发送才有效。
+ *
+ *   单字节发码：F9H 00H              双字节发码：FFF9H 0000H   主控程序编号
+ *               F9H 01H                         FFF9H 0001H   工程编号（Bin）
+ *               F9H 02H                         FFF9H 0002H   版本号（Bin）
+ *
+ * 能收到主控程序编号，就同时证明了：芯片供电正常、发码通道（DATA/CLK + 门控）
+ * 正常、BUSY 回传通道正常。这是“芯片到底在不在”最直接的判据。
+ */
+
+/* 回传是变长文本，实际只有几个字节，这里留足余量 */
+#define WT588F_INFO_TEXT_MAX            32
+
+/* 自检时等芯片空闲（刚播完的尾巴）的最长时间 */
+#define WT588F_SELFTEST_IDLE_TIMEOUT_MS 2000
+
+/* 自检回读的字节间空闲超时：9600 波特率下 1 字节/ms，100ms 足够判定结束 */
+#define WT588F_SELFTEST_INFO_GAP_MS     100
+
+typedef struct {
+    uint8_t main_program[WT588F_INFO_TEXT_MAX];   /* F9 00：主控程序编号（我司程序编号） */
+    size_t  main_program_len;
+    uint8_t project_no[WT588F_INFO_TEXT_MAX];     /* F9 01：Bin 文件工程编号 */
+    size_t  project_no_len;
+    uint8_t version_no[WT588F_INFO_TEXT_MAX];     /* F9 02：Bin 文件版本号 */
+    size_t  version_no_len;
+} wt588f_selftest_t;
+
+/**
+ * @brief  语音芯片自检：依次回读主控程序编号 / 工程编号 / 版本号
+ *
+ * 流程：等空闲（最多 WT588F_SELFTEST_IDLE_TIMEOUT_MS）
+ *       -> F9 00 回读主控程序编号（必须成功，否则返回错误）
+ *       -> F9 01 / F9 02 回读工程编号与版本号（失败只打告警，不影响返回值）
+ *
+ * 回读期间 BUSY 脚会被切成 UART RX，结束后自动还原成普通输入，
+ * 所以调用前后不要有别的任务在读这个脚（按键扫描不受影响，BUSY 不是按键脚）。
+ *
+ * @param  result 回读结果（原始字节），不能为 NULL；可用 WT588F_InfoToText() 转成字符串
+ * @return ESP_OK                 收到主控程序编号，芯片在线
+ *         ESP_ERR_INVALID_STATE  BSP 未初始化，或芯片正在播放导致 F9 无效
+ *         ESP_ERR_NOT_SUPPORTED  硬件没接 BUSY（无法回读，也判不了在线）
+ *         ESP_ERR_TIMEOUT        发了 F9 但一个字节都没收到（发码通道/门控/波特率问题）
+ *         其余为 UART / 发码错误码
+ */
+esp_err_t WT588F_SelfTest(wt588f_selftest_t *result);
+
+/**
+ * @brief  把回读到的原始字节转成可打印字符串（不可打印字符替换成 '.'）
+ *
+ * 芯片回传的是文本（如 "WT588F02-8S"、"V1.3"），个别工程可能带不可见字符，
+ * 直接打印到串口/屏上会是乱码，这里统一处理。
+ *
+ * @param  buf      原始数据，可为 NULL（输出空串）
+ * @param  len      原始长度
+ * @param  out      输出缓冲
+ * @param  out_size 输出缓冲大小（含结束符）
+ */
+void WT588F_InfoToText(const uint8_t *buf, size_t len, char *out, size_t out_size);
+
 /* ========================= 原始指令 ========================= */
 
 /**
