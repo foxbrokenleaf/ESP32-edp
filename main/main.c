@@ -20,6 +20,7 @@
 #include "bsp_rtc.h"
 #include "bsp_http.h"
 #include "DataStruct.h"
+#include "Checklist.h"
 #include "GT30L32S4W.h"
 #include "bsp_GT30L32S4W.h"
 #include "WT588F.h"
@@ -69,6 +70,9 @@ void app_main(void)
 
     /* Load course settings saved by the web page (defaults when NVS is empty). */
     Course_Init();
+
+    /* 清单（待办列表）同样保存在 NVS 里，NVS 为空时用演示默认值 */
+    Checklist_Init();
 
     EPD_Init();
 

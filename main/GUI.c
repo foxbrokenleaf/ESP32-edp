@@ -4,14 +4,15 @@
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
  * @LastEditTime: 2026-11-26 21:59:45
  * @FilePath: \epd\main\GUI.c
- * @Description: 墨水屏界面（课程表 / 时钟 / 日历）
+ * @Description: 墨水屏界面（课程表 / 时钟 / 日历 / 清单）
  *
  * 统一视觉风格：
  *   1. 顶部：黑色圆角标题栏，白字左标题 + 右信息；
- *   2. 中部：圆角卡片分区（课表页）、整屏大字号（时钟页）、月历网格（日历页）；
+ *   2. 中部：圆角卡片分区（课表页）、整屏大字号（时钟页）、月历网格（日历页）、
+ *      待办条目列表（清单页）；
  *   3. 底部：虚线上边线 + 左侧状态文字 + 右侧页码点（实心 = 当前页）。
  *
- * 三个界面由 GuiUpdate() 按 layout_no 切换，绘制完成后统一走 Gui_Flush() 刷屏。
+ * 四个界面由 GuiUpdate() 按 layout_no 切换，绘制完成后统一走 Gui_Flush() 刷屏。
  */
 #include "GUI.h"
 #include "EPD.h"
@@ -25,6 +26,7 @@
 #include "esp_rtc_time.h"
 #include "bsp_rtc.h"
 #include "DataStruct.h"
+#include "Checklist.h"
 
 uint8_t layout_no = 1;
 
@@ -75,6 +77,7 @@ static void GUI_DebugDump(void)
 void CourseGUI(void);
 void ClockGUI(void);
 void CalendarGUI(void);
+void ListGUI(void);
 
 uint8_t str_len(const char *str){
     uint8_t res = 0;
@@ -97,6 +100,9 @@ void GuiUpdate(void){
         break;
     case 2:
         CalendarGUI();
+        break;
+    case 3:
+        ListGUI();
         break;
     default:
         layout_no = 0;
@@ -674,6 +680,131 @@ void CalendarGUI(void)
     /* ---------- 底部状态栏 ---------- */
     snprintf(buf, sizeof(buf), "第 %d 周  %s", Gui_WeekOfYear(&tm_now),
              Gui_WeekdayLong(tm_now.tm_wday));
+    Gui_DrawFooter(buf);
+
+    Gui_Flush();
+}
+
+/* ========================= 清单界面 ========================= */
+
+/*
+ * GB2312 文本的像素宽度：ASCII 6px、汉字 12px
+ * （与 GT30L32S4W_FONT_ASCII_6X12 / GT30L32S4W_FONT_GB2312_12X12 的点阵一致）
+ */
+static int16_t Gui_Gb2312TextWidth(const char *gbk)
+{
+    const uint8_t *p = (const uint8_t *)gbk;
+    int16_t w = 0;
+
+    if (gbk == NULL) {
+        return 0;
+    }
+    while (*p != '\0') {
+        if (*p < 0x80) {
+            w = (int16_t)(w + 6);
+            p++;
+        } else {
+            w = (int16_t)(w + 12);
+            p += 2;
+        }
+    }
+    return w;
+}
+
+/*
+ * 画网页里填的 UTF-8 文本：
+ * 字库芯片只认 GB2312，先用 Checklist_Utf8ToGb2312() 转码再取模显示。
+ * 返回实际占用的像素宽度（0 表示没有画）。
+ */
+static int16_t Gui_ShowUtf8String(int16_t x, int16_t y, const char *utf8)
+{
+    char gbk[CHECKLIST_ITEM_TEXT_LEN * 2 + 1];
+
+    if (utf8 == NULL || utf8[0] == '\0') {
+        return 0;
+    }
+    if (Checklist_Utf8ToGb2312(utf8, gbk, sizeof(gbk)) == 0) {
+        return 0;
+    }
+
+    GT30L32S4W_ShowString(x, y, gbk,
+                          GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
+    return Gui_Gb2312TextWidth(gbk);
+}
+
+void ListGUI(void)
+{
+    struct tm tm_now;
+    char buf[64];
+    int16_t row_y = GUI_CARD_Y + 2;
+    uint8_t total = Checklist_TotalCount();
+    uint8_t done  = Checklist_DoneCount();
+    uint8_t drawn = 0;
+    int i;
+
+    if (rtc_get_time(&tm_now) != ESP_OK) {
+        memset(&tm_now, 0, sizeof(tm_now));
+    }
+
+    EPD_Clear();
+
+    /* ---------- 顶部标题栏：右侧完成进度 ---------- */
+    snprintf(buf, sizeof(buf), "%d/%d", (int)done, (int)total);
+    Gui_DrawHeader("清单", buf);
+
+    /* ---------- 待办条目：序号 + 复选框 + 文字 ---------- */
+    for (i = 0; i < CHECKLIST_ITEM_COUNT; i++) {
+        const checklist_item_t *item = &Checklist_Items[i];
+        int16_t text_w;
+
+        if (item->text[0] == '\0') {
+            continue;                       /* 空项不占一行（网页里清空文字即可删除） */
+        }
+
+        snprintf(buf, sizeof(buf), "%d", (int)drawn + 1);
+        GT30L32S4W_ShowString(6, (int16_t)(row_y + 1), buf,
+                              GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
+
+        /* 复选框：空心方框，已完成再画一个对勾 */
+        EPD_DrawRectangle(17, (int16_t)(row_y + 1), 10, 10, EPD_UNFILLED);
+        if (item->done) {
+            EPD_DrawLine(19, (int16_t)(row_y + 6), 21, (int16_t)(row_y + 9));
+            EPD_DrawLine(21, (int16_t)(row_y + 9), 25, (int16_t)(row_y + 4));
+        }
+
+        text_w = Gui_ShowUtf8String(32, row_y, item->text);
+        if (item->done && text_w > 2) {
+            /* 已完成：文字中间划一条删除线 */
+            EPD_DrawLine(32, (int16_t)(row_y + 6), (int16_t)(32 + text_w - 1),
+                         (int16_t)(row_y + 6));
+        }
+
+        row_y = (int16_t)(row_y + 12);
+        drawn++;
+    }
+
+    /* ---------- 空清单提示 ---------- */
+    if (drawn == 0) {
+        const char *hint1 = "清单为空";
+        const char *hint2 = "打开网页添加待办事项";
+        int16_t w1 = Gui_MeasureText(hint1, GT30L32S4W_FONT_ASCII_8X16,
+                                     GT30L32S4W_FONT_GB2312_16X16);
+        int16_t w2 = Gui_MeasureText(hint2, GT30L32S4W_FONT_ASCII_6X12,
+                                     GT30L32S4W_FONT_GB2312_12X12);
+
+        GT30L32S4W_ShowString((int16_t)((GUI_W - w1) / 2), 62, hint1,
+                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 0);
+        GT30L32S4W_ShowString((int16_t)((GUI_W - w2) / 2), 84, hint2,
+                              GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
+    }
+
+    /* ---------- 底部状态栏：日期（RTC 未校时则显示完成进度） ---------- */
+    if (tm_now.tm_year > 0) {
+        snprintf(buf, sizeof(buf), "%02d-%02d %s",
+                 tm_now.tm_mon + 1, tm_now.tm_mday, Gui_WeekdayLong(tm_now.tm_wday));
+    } else {
+        snprintf(buf, sizeof(buf), "已完成 %d/%d 项", (int)done, (int)total);
+    }
     Gui_DrawFooter(buf);
 
     Gui_Flush();

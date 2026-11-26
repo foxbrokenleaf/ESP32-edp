@@ -4,12 +4,14 @@
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
  * @LastEditTime: 2026-11-26 22:30:00
  * @FilePath: \epd\main\http.c
- * @Description: 网页管理模块（关于设备 / 设置课程表）。
+ * @Description: 网页管理模块（关于设备 / 设置课程表 / 清单）。
  *
  * 页面使用内嵌 HTML（不依赖文件系统），接口：
- *   GET  /api/about   设备硬件、固件、网络、运行时间等信息
- *   GET  /api/course  当前课表
- *   POST /api/course  更新课表 -> 写入 NVS -> 重绘墨水屏
+ *   GET  /api/about      设备硬件、固件、网络、运行时间等信息
+ *   GET  /api/course     当前课表
+ *   POST /api/course     更新课表 -> 写入 NVS -> 重绘墨水屏
+ *   GET  /api/checklist  当前清单（待办事项）
+ *   POST /api/checklist  更新清单 -> 写入 NVS -> 切到清单页重绘
  */
 #include "http.h"
 
@@ -19,6 +21,7 @@
 #include <time.h>
 
 #include "cJSON.h"
+#include "Checklist.h"
 #include "DataStruct.h"
 #include "GUI.h"
 #include "bsp_rtc.h"
@@ -39,7 +42,9 @@ static const char *TAG = "HTTP_WEB";
 
 /* POST 请求体上限（课表 JSON 很短） */
 #define WEB_COURSE_BODY_MAX         768
-/* 保存课表后重绘墨水屏的任务栈（与按键任务一致） */
+/* 清单 POST 请求体上限：8 项 x (40 字节文字 + JSON 包装) 留足余量 */
+#define WEB_CHECKLIST_BODY_MAX      1536
+/* 保存后重绘墨水屏的任务栈（与按键任务一致） */
 #define WEB_GUI_TASK_STACK          4096
 
 /* ========================= 内嵌网页 ========================= */
@@ -145,6 +150,29 @@ static const char *const INDEX_HTML[] = {
 ".time-range { display: flex; align-items: center; gap: 10px; }",
 ".time-range span { color: #9aa4b2; font-size: 0.85rem; }",
 ".hint { color: #8a93a0; font-size: 0.78rem; margin: 0; }",
+".list-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }",
+".list-row .no { width: 20px; flex: none; text-align: right; color: #8a93a0; font-size: 0.82rem; }",
+".list-row input[type=checkbox] {",
+"  width: 20px;",
+"  height: 20px;",
+"  flex: none;",
+"  accent-color: #5b8cff;",
+"  cursor: pointer;",
+"}",
+".list-row input[type=text] {",
+"  flex: 1;",
+"  min-width: 0;",
+"  padding: 10px 12px;",
+"  background: #1d1f22;",
+"  border: 1px solid #3e4147;",
+"  border-radius: 10px;",
+"  color: #e6e6e6;",
+"  font-size: 0.92rem;",
+"  outline: none;",
+"}",
+".list-row input[type=text]:focus { border-color: #5b8cff; }",
+".list-row input.done { color: #7d8590; text-decoration: line-through; }",
+"#listRows { margin: 10px 0; }",
 ".actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }",
 ".btn {",
 "  padding: 11px 22px;",
@@ -194,6 +222,7 @@ static const char *const INDEX_HTML[] = {
 "<nav>",
 "  <button class='tab active' id='tabAbout' type='button'>关于设备</button>",
 "  <button class='tab' id='tabCourse' type='button'>设置课程表</button>",
+"  <button class='tab' id='tabChecklist' type='button'>清单</button>",
 "</nav>",
 "<main>",
 "  <section id='pageAbout'>",
@@ -259,6 +288,19 @@ static const char *const INDEX_HTML[] = {
 "      </div>",
 "    </div>",
 "  </section>",
+"  <section id='pageChecklist' hidden>",
+"    <div class='card'>",
+"      <h2>今日清单</h2>",
+"      <p class='hint' id='listStat'>正在读取…</p>",
+"      <div id='listRows'></div>",
+"      <p class='hint'>最多 8 项；文字留空保存后即删除该项；每项最多 40 字节（约 13 个汉字），只支持 GB2312 汉字、英文和数字。</p>",
+"      <div class='actions'>",
+"        <button class='btn btn-ghost' id='listReloadBtn' type='button'>读取当前值</button>",
+"        <button class='btn btn-ghost' id='listClearBtn' type='button'>清空填写</button>",
+"        <button class='btn btn-primary' id='listSaveBtn' type='button'>保存并刷新屏幕</button>",
+"      </div>",
+"    </div>",
+"  </section>",
 "</main>",
 "<div id='toast'></div>",
 "<script>",
@@ -284,12 +326,15 @@ static const char *const INDEX_HTML[] = {
 "  toastTimer = setTimeout(function () { box.className = ''; }, 3200);",
 "}",
 "function showTab(name) {",
-"  const about = name === 'about';",
-"  el('tabAbout').classList.toggle('active', about);",
-"  el('tabCourse').classList.toggle('active', !about);",
-"  el('pageAbout').hidden = !about;",
-"  el('pageCourse').hidden = about;",
-"  if (about) { loadAbout(); } else { loadCourse(); }",
+"  const names = ['about', 'course', 'checklist'];",
+"  names.forEach(function (n) {",
+"    const key = n.charAt(0).toUpperCase() + n.slice(1);",
+"    el('tab' + key).classList.toggle('active', n === name);",
+"    el('page' + key).hidden = (n !== name);",
+"  });",
+"  if (name === 'about') { loadAbout(); }",
+"  else if (name === 'course') { loadCourse(); }",
+"  else { loadChecklist(); }",
 "}",
 "async function loadAbout() {",
 "  try {",
@@ -386,10 +431,89 @@ static const char *const INDEX_HTML[] = {
 "    el('saveBtn').disabled = false;",
 "  }",
 "}",
+"const LIST_MAX = 8;",
+"const LIST_TEXT_MAX = 40;",
+"function byteLength(text) {",
+"  return new TextEncoder().encode(text).length;",
+"}",
+"function buildListRows() {",
+"  let html = '';",
+"  for (let i = 0; i < LIST_MAX; i++) {",
+"    html += `<div class='list-row'>` +",
+"      `<span class='no'>${i + 1}</span>` +",
+"      `<input id='listDone${i}' type='checkbox' title='标记完成'>` +",
+"      `<input id='listText${i}' type='text' maxlength='40' autocomplete='off' placeholder='第 ${i + 1} 项'>` +",
+"      `</div>`;",
+"  }",
+"  el('listRows').innerHTML = html;",
+"  for (let i = 0; i < LIST_MAX; i++) {",
+"    el('listDone' + i).addEventListener('change', function () { syncDoneStyle(i); });",
+"  }",
+"}",
+"function syncDoneStyle(i) {",
+"  el('listText' + i).classList.toggle('done', el('listDone' + i).checked);",
+"}",
+"function fillList(data) {",
+"  const items = data.items || [];",
+"  for (let i = 0; i < LIST_MAX; i++) {",
+"    const item = items[i] || { text: '', done: false };",
+"    el('listText' + i).value = item.text || '';",
+"    el('listDone' + i).checked = !!item.done;",
+"    syncDoneStyle(i);",
+"  }",
+"  el('listStat').textContent = '已完成 ' + (data.done || 0) + ' / ' + (data.total || 0) + ' 项';",
+"}",
+"async function loadChecklist() {",
+"  try {",
+"    const data = await fetch('/api/checklist').then(function (r) { return r.json(); });",
+"    fillList(data);",
+"  } catch (e) {",
+"    toast('清单读取失败', false);",
+"  }",
+"}",
+"function clearList() {",
+"  for (let i = 0; i < LIST_MAX; i++) {",
+"    el('listText' + i).value = '';",
+"    el('listDone' + i).checked = false;",
+"    syncDoneStyle(i);",
+"  }",
+"  el('listStat').textContent = '填写已清空，保存后生效';",
+"}",
+"async function saveChecklist() {",
+"  const items = [];",
+"  for (let i = 0; i < LIST_MAX; i++) {",
+"    const text = (el('listText' + i).value || '').trim();",
+"    if (byteLength(text) > LIST_TEXT_MAX) {",
+"      toast('第 ' + (i + 1) + ' 项太长：最多 ' + LIST_TEXT_MAX + ' 字节（约 13 个汉字）', false);",
+"      return;",
+"    }",
+"    items.push({ text: text, done: el('listDone' + i).checked });",
+"  }",
+"  el('listSaveBtn').disabled = true;",
+"  try {",
+"    const res = await fetch('/api/checklist', {",
+"      method: 'POST',",
+"      headers: { 'Content-Type': 'application/json' },",
+"      body: JSON.stringify({ items: items })",
+"    });",
+"    const data = await res.json();",
+"    toast(data.message || (res.ok ? '保存成功' : '保存失败'), res.ok);",
+"    if (res.ok) { await loadChecklist(); }",
+"  } catch (e) {",
+"    toast('保存请求失败', false);",
+"  } finally {",
+"    el('listSaveBtn').disabled = false;",
+"  }",
+"}",
 "el('tabAbout').addEventListener('click', function () { showTab('about'); });",
 "el('tabCourse').addEventListener('click', function () { showTab('course'); });",
+"el('tabChecklist').addEventListener('click', function () { showTab('checklist'); });",
 "el('reloadBtn').addEventListener('click', loadCourse);",
 "el('saveBtn').addEventListener('click', saveCourse);",
+"el('listReloadBtn').addEventListener('click', loadChecklist);",
+"el('listClearBtn').addEventListener('click', clearList);",
+"el('listSaveBtn').addEventListener('click', saveChecklist);",
+"buildListRows();",
 "showTab('about');",
 "</script>",
 "</body>",
@@ -485,28 +609,36 @@ static const char *web_reset_reason_text(esp_reset_reason_t reason)
 
 static volatile bool s_gui_refresh_busy = false;
 
+/*
+ * 刷屏任务：arg 传入要显示的界面编号（GUI_LAYOUT_xxx），
+ * 这样保存课表/清单后都能直接跳到对应页面，改动能立刻看到。
+ */
 static void web_gui_refresh_task(void *arg)
 {
-    (void)arg;
+    uint8_t layout = (uint8_t)(uintptr_t)arg;
 
     /* 先让 HTTP 响应发回浏览器，再刷屏（刷一帧比较慢） */
     vTaskDelay(pdMS_TO_TICKS(300));
-    ESP_LOGI(TAG, "按网页设置重绘墨水屏");
-    layout_no = 0;      /* 保存后切到课程表页，保证改动能立刻看到 */
+    ESP_LOGI(TAG, "按网页设置重绘墨水屏（第 %d 页）", (int)layout);
+
+    if (layout < GUI_LAYOUT_COUNT) {
+        layout_no = layout;
+    }
     GuiUpdate();
 
     s_gui_refresh_busy = false;
     vTaskDelete(NULL);
 }
 
-static void web_request_gui_refresh(void)
+static void web_request_gui_refresh(uint8_t layout)
 {
     if (s_gui_refresh_busy) {
         return;
     }
     s_gui_refresh_busy = true;
 
-    if (xTaskCreate(web_gui_refresh_task, "web_gui", WEB_GUI_TASK_STACK, NULL, 3, NULL) != pdPASS) {
+    if (xTaskCreate(web_gui_refresh_task, "web_gui", WEB_GUI_TASK_STACK,
+                    (void *)(uintptr_t)layout, 3, NULL) != pdPASS) {
         s_gui_refresh_busy = false;
         ESP_LOGW(TAG, "创建刷屏任务失败");
     }
@@ -598,6 +730,59 @@ static esp_err_t web_about_get(httpd_req_t *req)
 
 /* ========================= 设置课程表 ========================= */
 
+/*
+ * 读取 POST 的 JSON 请求体（自动处理分包与超时）。
+ * 成功时 *body 指向 malloc 出来的、以 '\0' 结尾的缓冲区，调用者负责 free()；
+ * 失败时 *status 返回建议的 HTTP 状态码，err 返回中文说明。
+ */
+static esp_err_t web_read_json_body(httpd_req_t *req, size_t max_len, char **body,
+                                    const char **status, char *err, size_t err_size)
+{
+    size_t received = 0;
+    int retry = 0;
+    char *buf;
+
+    *body = NULL;
+    *status = "400 Bad Request";
+
+    if (req->content_len == 0 || req->content_len >= max_len) {
+        snprintf(err, err_size, "请求内容长度非法");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    buf = malloc(req->content_len + 1);
+    if (buf == NULL) {
+        *status = "500 Internal Server Error";
+        snprintf(err, err_size, "内存不足");
+        return ESP_ERR_NO_MEM;
+    }
+
+    while (received < req->content_len) {
+        int got = httpd_req_recv(req, buf + received, req->content_len - received);
+
+        if (got == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++retry > 3) {
+                free(buf);
+                *status = "408 Request Timeout";
+                snprintf(err, err_size, "读取请求内容超时");
+                return ESP_ERR_TIMEOUT;
+            }
+            continue;
+        }
+        if (got <= 0) {
+            free(buf);
+            snprintf(err, err_size, "读取请求内容失败");
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+        received += (size_t)got;
+        retry = 0;
+    }
+
+    buf[received] = '\0';
+    *body = buf;
+    return ESP_OK;
+}
+
 static esp_err_t web_course_get(httpd_req_t *req)
 {
     char *json = Course_ToJson();
@@ -617,39 +802,15 @@ static esp_err_t web_course_get(httpd_req_t *req)
 
 static esp_err_t web_course_post(httpd_req_t *req)
 {
-    char *body;
+    char *body = NULL;
     char err_msg[96] = { 0 };
-    size_t received = 0;
-    int retry = 0;
+    const char *status = "400 Bad Request";
     esp_err_t ret;
 
-    if (req->content_len == 0 || req->content_len >= WEB_COURSE_BODY_MAX) {
-        return web_send_result(req, false, "请求内容长度非法", "400 Bad Request");
+    ret = web_read_json_body(req, WEB_COURSE_BODY_MAX, &body, &status, err_msg, sizeof(err_msg));
+    if (ret != ESP_OK) {
+        return web_send_result(req, false, err_msg, status);
     }
-
-    body = malloc(req->content_len + 1);
-    if (body == NULL) {
-        return httpd_resp_send_500(req);
-    }
-
-    while (received < req->content_len) {
-        int got = httpd_req_recv(req, body + received, req->content_len - received);
-
-        if (got == HTTPD_SOCK_ERR_TIMEOUT) {
-            if (++retry > 3) {
-                free(body);
-                return web_send_result(req, false, "读取请求内容超时", "408 Request Timeout");
-            }
-            continue;
-        }
-        if (got <= 0) {
-            free(body);
-            return web_send_result(req, false, "读取请求内容失败", "400 Bad Request");
-        }
-        received += (size_t)got;
-        retry = 0;
-    }
-    body[received] = '\0';
 
     ret = Course_ApplyJson(body, err_msg, sizeof(err_msg));
     free(body);
@@ -661,9 +822,55 @@ static esp_err_t web_course_post(httpd_req_t *req)
     }
 
     ESP_LOGI(TAG, "网页已更新课表：%s", err_msg);
-    web_request_gui_refresh();
+    web_request_gui_refresh(GUI_LAYOUT_COURSE);
 
     return web_send_result(req, true, "课表已保存，墨水屏正在刷新", "200 OK");
+}
+
+/* ========================= 清单（待办事项） ========================= */
+
+static esp_err_t web_checklist_get(httpd_req_t *req)
+{
+    char *json = Checklist_ToJson();
+    esp_err_t ret;
+
+    if (json == NULL) {
+        return httpd_resp_send_500(req);
+    }
+
+    httpd_resp_set_type(req, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    ret = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(json);
+
+    return ret;
+}
+
+static esp_err_t web_checklist_post(httpd_req_t *req)
+{
+    char *body = NULL;
+    char err_msg[96] = { 0 };
+    const char *status = "400 Bad Request";
+    esp_err_t ret;
+
+    ret = web_read_json_body(req, WEB_CHECKLIST_BODY_MAX, &body, &status, err_msg, sizeof(err_msg));
+    if (ret != ESP_OK) {
+        return web_send_result(req, false, err_msg, status);
+    }
+
+    ret = Checklist_ApplyJson(body, err_msg, sizeof(err_msg));
+    free(body);
+
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "更新清单失败：%s（%s）", err_msg, esp_err_to_name(ret));
+        return web_send_result(req, false, (err_msg[0] != '\0') ? err_msg : "保存失败",
+                               "400 Bad Request");
+    }
+
+    ESP_LOGI(TAG, "网页已更新清单：%s", err_msg);
+    web_request_gui_refresh(GUI_LAYOUT_CHECKLIST);
+
+    return web_send_result(req, true, "清单已保存，墨水屏正在刷新", "200 OK");
 }
 
 /* ========================= 页面与 favicon ========================= */
@@ -700,11 +907,13 @@ static esp_err_t web_favicon_get(httpd_req_t *req)
 esp_err_t http_web_register(httpd_handle_t server)
 {
     static const httpd_uri_t routes[] = {
-        { .uri = "/",            .method = HTTP_GET,  .handler = web_index_get,   .user_ctx = NULL },
-        { .uri = "/api/about",   .method = HTTP_GET,  .handler = web_about_get,   .user_ctx = NULL },
-        { .uri = "/api/course",  .method = HTTP_GET,  .handler = web_course_get,  .user_ctx = NULL },
-        { .uri = "/api/course",  .method = HTTP_POST, .handler = web_course_post, .user_ctx = NULL },
-        { .uri = "/favicon.ico", .method = HTTP_GET,  .handler = web_favicon_get, .user_ctx = NULL },
+        { .uri = "/",              .method = HTTP_GET,  .handler = web_index_get,      .user_ctx = NULL },
+        { .uri = "/api/about",     .method = HTTP_GET,  .handler = web_about_get,      .user_ctx = NULL },
+        { .uri = "/api/course",    .method = HTTP_GET,  .handler = web_course_get,     .user_ctx = NULL },
+        { .uri = "/api/course",    .method = HTTP_POST, .handler = web_course_post,    .user_ctx = NULL },
+        { .uri = "/api/checklist", .method = HTTP_GET,  .handler = web_checklist_get,  .user_ctx = NULL },
+        { .uri = "/api/checklist", .method = HTTP_POST, .handler = web_checklist_post, .user_ctx = NULL },
+        { .uri = "/favicon.ico",   .method = HTTP_GET,  .handler = web_favicon_get,    .user_ctx = NULL },
     };
     esp_err_t ret;
 
@@ -720,6 +929,6 @@ esp_err_t http_web_register(httpd_handle_t server)
         }
     }
 
-    ESP_LOGI(TAG, "网页路由注册完成：关于设备 / 设置课程表");
+    ESP_LOGI(TAG, "网页路由注册完成：关于设备 / 设置课程表 / 清单");
     return ESP_OK;
 }

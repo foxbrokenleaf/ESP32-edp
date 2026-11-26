@@ -5,7 +5,7 @@
  * @LastEditTime: 2026-11-26 21:40:00
  * @FilePath: \epd\main\GUI.h
  * @Description: 界面（GUI）对外接口。
- *               页面在 GUI.c 里实现：0=课程表, 1=时钟, 2=日历，
+ *               页面在 GUI.c 里实现：0=课程表, 1=时钟, 2=日历, 3=清单，
  *               用 layout_no 选页，改 GUI_LAYOUT_COUNT 即可增删页面。
  */
 #ifndef __GUI_H__
@@ -13,8 +13,14 @@
 
 #include <stdint.h>
 
+/* 各界面在 layout_no 里的编号（网页保存后也会直接跳到对应页面） */
+#define GUI_LAYOUT_COURSE       0
+#define GUI_LAYOUT_CLOCK        1
+#define GUI_LAYOUT_CALENDAR     2
+#define GUI_LAYOUT_CHECKLIST    3
+
 /* 界面总数：底部页码点、按键翻页都会跟着这个宏走 */
-#define GUI_LAYOUT_COUNT        3
+#define GUI_LAYOUT_COUNT        4
 
 /* 当前显示的界面编号（0 ~ GUI_LAYOUT_COUNT-1） */
 extern uint8_t layout_no;
@@ -26,5 +32,6 @@ void GuiUpdate(void);
 void CourseGUI(void);
 void ClockGUI(void);
 void CalendarGUI(void);
+void ListGUI(void);
 
 #endif /* __GUI_H__ */

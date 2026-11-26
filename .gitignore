@@ -26,6 +26,8 @@ build/
 
 # ESP-IDF specific build outputs
 *.bin
+# 字库映射表由 tools/gen_gb2312_map.py 生成，随源码提交（构建时 EMBED_FILES 需要）
+!main/gb2312_map.bin
 *.elf
 *.map
 flasher_args.json # Generated in build directory
