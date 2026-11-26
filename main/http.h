@@ -4,15 +4,17 @@
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
  * @LastEditTime: 2026-11-26 22:30:00
  * @FilePath: \epd\main\http.h
- * @Description: 网页管理模块接口：关于设备 / 设置课程表 / 清单。
+ * @Description: 网页管理模块接口：关于设备 / 设置课程表 / 清单 / 导入完整课程表。
  *
  * 由 bsp_http.c 在 HTTP 服务启动后调用 http_web_register() 注册以下路由：
- *   GET  /                管理页面（关于设备 + 设置课程表 + 清单）
+ *   GET  /                管理页面（关于设备 + 设置课程表 + 清单 + 导入完整课程表）
  *   GET  /api/about       设备信息 JSON
  *   GET  /api/course      当前课表 JSON
  *   POST /api/course      更新课表 JSON（保存 NVS 并重绘墨水屏）
  *   GET  /api/checklist   当前清单 JSON
  *   POST /api/checklist   更新清单 JSON（保存 NVS 并切到清单页重绘）
+ *   GET  /api/timetable   完整课程表 JSON（与导入格式一致）
+ *   POST /api/timetable   导入完整课程表 JSON（校验后保存 NVS）
  *   GET  /favicon.ico     空响应，避免浏览器反复 404
  */
 #ifndef __HTTP_H__

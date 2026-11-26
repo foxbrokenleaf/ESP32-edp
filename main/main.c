@@ -21,6 +21,7 @@
 #include "bsp_http.h"
 #include "DataStruct.h"
 #include "Checklist.h"
+#include "Timetable.h"
 #include "GT30L32S4W.h"
 #include "bsp_GT30L32S4W.h"
 #include "WT588F.h"
@@ -73,6 +74,9 @@ void app_main(void)
 
     /* 清单（待办列表）同样保存在 NVS 里，NVS 为空时用演示默认值 */
     Checklist_Init();
+
+    /* Load the full timetable imported from the web page (empty table when NVS is blank). */
+    Timetable_Init();
 
     EPD_Init();
 

@@ -4,7 +4,7 @@
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
  * @LastEditTime: 2026-11-26 22:30:00
  * @FilePath: \epd\main\http.c
- * @Description: 网页管理模块（关于设备 / 设置课程表 / 清单）。
+ * @Description: 网页管理模块（关于设备 / 设置课程表 / 清单 / 导入完整课程表）。
  *
  * 页面使用内嵌 HTML（不依赖文件系统），接口：
  *   GET  /api/about      设备硬件、固件、网络、运行时间等信息
@@ -12,6 +12,8 @@
  *   POST /api/course     更新课表 -> 写入 NVS -> 重绘墨水屏
  *   GET  /api/checklist  当前清单（待办事项）
  *   POST /api/checklist  更新清单 -> 写入 NVS -> 切到清单页重绘
+ *   GET  /api/timetable  完整课程表（与导入格式一致）
+ *   POST /api/timetable  导入完整课程表 -> 校验 -> 写入 NVS
  */
 #include "http.h"
 
@@ -23,6 +25,7 @@
 #include "cJSON.h"
 #include "Checklist.h"
 #include "DataStruct.h"
+#include "Timetable.h"
 #include "GUI.h"
 #include "bsp_rtc.h"
 
@@ -44,6 +47,8 @@ static const char *TAG = "HTTP_WEB";
 #define WEB_COURSE_BODY_MAX         768
 /* 清单 POST 请求体上限：8 项 x (40 字节文字 + JSON 包装) 留足余量 */
 #define WEB_CHECKLIST_BODY_MAX      1536
+/* 课程表 POST 请求体上限：16 门课 x 64 个时段（紧凑 JSON 约 34 KB），留足余量 */
+#define WEB_TIMETABLE_BODY_MAX      49152
 /* 保存后重绘墨水屏的任务栈（与按键任务一致） */
 #define WEB_GUI_TASK_STACK          4096
 
@@ -78,6 +83,7 @@ static const char *const INDEX_HTML[] = {
 "header p { margin: 6px 0 0; color: #9aa4b2; font-size: 0.86rem; }",
 "nav {",
 "  display: flex;",
+"  flex-wrap: wrap;",
 "  gap: 10px;",
 "  max-width: 760px;",
 "  margin: 8px auto 0;",
@@ -147,6 +153,22 @@ static const char *const INDEX_HTML[] = {
 "  outline: none;",
 "}",
 ".field input:focus, .field select:focus { border-color: #5b8cff; }",
+".field textarea {",
+"  width: 100%;",
+"  min-height: 240px;",
+"  padding: 11px 13px;",
+"  background: #1d1f22;",
+"  border: 1px solid #3e4147;",
+"  border-radius: 11px;",
+"  color: #e6e6e6;",
+"  font-family: Consolas, 'Courier New', monospace;",
+"  font-size: 0.82rem;",
+"  line-height: 1.5;",
+"  resize: vertical;",
+"  outline: none;",
+"}",
+".field textarea:focus { border-color: #5b8cff; }",
+".field input[type=file] { padding: 9px 12px; font-size: 0.82rem; }",
 ".time-range { display: flex; align-items: center; gap: 10px; }",
 ".time-range span { color: #9aa4b2; font-size: 0.85rem; }",
 ".hint { color: #8a93a0; font-size: 0.78rem; margin: 0; }",
@@ -223,6 +245,7 @@ static const char *const INDEX_HTML[] = {
 "  <button class='tab active' id='tabAbout' type='button'>关于设备</button>",
 "  <button class='tab' id='tabCourse' type='button'>设置课程表</button>",
 "  <button class='tab' id='tabChecklist' type='button'>清单</button>",
+"  <button class='tab' id='tabTimetable' type='button'>导入课程表</button>",
 "</nav>",
 "<main>",
 "  <section id='pageAbout'>",
@@ -301,6 +324,28 @@ static const char *const INDEX_HTML[] = {
 "      </div>",
 "    </div>",
 "  </section>",
+"  <section id='pageTimetable' hidden>",
+"    <div class='card'>",
+"      <h2>导入完整课程表</h2>",
+"      <p class='hint'>粘贴符合 JSON Schema 的课程表，或选择 .json 文件（请使用 UTF-8 编码）。根对象键为 4 位数字课程编号；每门课必须包含 CourseName、CourseDuration、CourseSessions、Classroom、Teacher。</p>",
+"      <div class='field'>",
+"        <label for='timetableFile'>选择 JSON 文件</label>",
+"        <input id='timetableFile' type='file' accept='.json,application/json'>",
+"      </div>",
+"      <div class='field'>",
+"        <label for='timetableJson'>课程表 JSON</label>",
+"        <textarea id='timetableJson' spellcheck='false' placeholder='在此粘贴课程表 JSON'></textarea>",
+"      </div>",
+"      <p class='hint' id='timetableStat'>正在读取…</p>",
+"      <p class='hint'>至少 1 门、最多 16 门课程；每门最多 8 个 CourseDuration、64 个 CourseSessions；节次 1~99，周次 1~53。</p>",
+"      <p class='hint'>文字仅支持 GB2312 字符：课程名 ≤40 字节（约 13 个汉字），教室 / 教师 ≤24 字节（约 8 个汉字）。</p>",
+"      <div class='actions'>",
+"        <button class='btn btn-ghost' id='timetableReloadBtn' type='button'>读取当前课程表</button>",
+"        <button class='btn btn-ghost' id='timetableDownloadBtn' type='button'>导出 JSON</button>",
+"        <button class='btn btn-primary' id='timetableSaveBtn' type='button'>导入并保存</button>",
+"      </div>",
+"    </div>",
+"  </section>",
 "</main>",
 "<div id='toast'></div>",
 "<script>",
@@ -326,7 +371,7 @@ static const char *const INDEX_HTML[] = {
 "  toastTimer = setTimeout(function () { box.className = ''; }, 3200);",
 "}",
 "function showTab(name) {",
-"  const names = ['about', 'course', 'checklist'];",
+"  const names = ['about', 'course', 'checklist', 'timetable'];",
 "  names.forEach(function (n) {",
 "    const key = n.charAt(0).toUpperCase() + n.slice(1);",
 "    el('tab' + key).classList.toggle('active', n === name);",
@@ -334,6 +379,7 @@ static const char *const INDEX_HTML[] = {
 "  });",
 "  if (name === 'about') { loadAbout(); }",
 "  else if (name === 'course') { loadCourse(); }",
+"  else if (name === 'timetable') { loadTimetable(); }",
 "  else { loadChecklist(); }",
 "}",
 "async function loadAbout() {",
@@ -505,14 +551,99 @@ static const char *const INDEX_HTML[] = {
 "    el('listSaveBtn').disabled = false;",
 "  }",
 "}",
+"async function loadTimetable() {",
+"  try {",
+"    const data = await fetch('/api/timetable').then(function (r) { return r.json(); });",
+"    const keys = Object.keys(data || {});",
+"    let sessions = 0;",
+"    keys.forEach(function (key) {",
+"      const course = data[key] || {};",
+"      sessions += (course.CourseSessions || []).length;",
+"    });",
+"    el('timetableJson').value = JSON.stringify(data, null, 2);",
+"    el('timetableStat').textContent = keys.length",
+"      ? ('已保存 ' + keys.length + ' 门课程，共 ' + sessions + ' 个上课时段')",
+"      : '当前没有保存课程表，可粘贴 JSON 后导入';",
+"  } catch (e) {",
+"    toast('课程表读取失败', false);",
+"  }",
+"}",
+"function readTimetableFile() {",
+"  const input = el('timetableFile');",
+"  const file = input.files && input.files[0];",
+"  if (!file) { return; }",
+"  const reader = new FileReader();",
+"  reader.onload = function () {",
+"    el('timetableJson').value = String(reader.result || '');",
+"    el('timetableStat').textContent = '已读取 ' + file.name + '，点击“导入并保存”生效';",
+"  };",
+"  reader.onerror = function () { toast('文件读取失败', false); };",
+"  reader.readAsText(file, 'utf-8');",
+"}",
+"function downloadTimetable() {",
+"  const text = (el('timetableJson').value || '').trim();",
+"  if (!text) { toast('没有可导出的课程表', false); return; }",
+"  const blob = new Blob([text], { type: 'application/json;charset=utf-8' });",
+"  const url = URL.createObjectURL(blob);",
+"  const link = document.createElement('a');",
+"  link.href = url;",
+"  link.download = 'timetable.json';",
+"  document.body.appendChild(link);",
+"  link.click();",
+"  document.body.removeChild(link);",
+"  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);",
+"  toast('课程表 JSON 已导出', true);",
+"}",
+"async function saveTimetable() {",
+"  const text = (el('timetableJson').value || '').trim();",
+"  if (!text) { toast('请先粘贴或选择课程表 JSON', false); return; }",
+"  let data;",
+"  try { data = JSON.parse(text); } catch (e) { toast('JSON 格式错误：' + e.message, false); return; }",
+"  if (data === null || typeof data !== 'object' || Array.isArray(data)) {",
+"    toast('根节点必须是对象（4 位数字编号 -> 课程）', false);",
+"    return;",
+"  }",
+"  const keys = Object.keys(data);",
+"  if (!keys.length) { toast('课程表不能为空，至少要有 1 门课程', false); return; }",
+"  for (let i = 0; i < keys.length; i++) {",
+"    const course = data[keys[i]];",
+"    if (!/^[0-9]{4}$/.test(keys[i])) { toast('课程编号 “' + keys[i] + '” 必须是 4 位数字', false); return; }",
+"    if (course === null || typeof course !== 'object' || Array.isArray(course)) {",
+"      toast('课程 ' + keys[i] + ' 的内容必须是对象', false);",
+"      return;",
+"    }",
+"  }",
+"  const body = JSON.stringify(data);",
+"  if (byteLength(body) > 49152) { toast('课程表 JSON 太大（最多 48 KB）', false); return; }",
+"  el('timetableSaveBtn').disabled = true;",
+"  try {",
+"    const res = await fetch('/api/timetable', {",
+"      method: 'POST',",
+"      headers: { 'Content-Type': 'application/json' },",
+"      body: body",
+"    });",
+"    const result = await res.json();",
+"    toast(result.message || (res.ok ? '导入成功' : '导入失败'), res.ok);",
+"    if (res.ok) { await loadTimetable(); }",
+"  } catch (e) {",
+"    toast('导入请求失败', false);",
+"  } finally {",
+"    el('timetableSaveBtn').disabled = false;",
+"  }",
+"}",
 "el('tabAbout').addEventListener('click', function () { showTab('about'); });",
 "el('tabCourse').addEventListener('click', function () { showTab('course'); });",
 "el('tabChecklist').addEventListener('click', function () { showTab('checklist'); });",
+"el('tabTimetable').addEventListener('click', function () { showTab('timetable'); });",
 "el('reloadBtn').addEventListener('click', loadCourse);",
 "el('saveBtn').addEventListener('click', saveCourse);",
 "el('listReloadBtn').addEventListener('click', loadChecklist);",
 "el('listClearBtn').addEventListener('click', clearList);",
 "el('listSaveBtn').addEventListener('click', saveChecklist);",
+"el('timetableReloadBtn').addEventListener('click', loadTimetable);",
+"el('timetableDownloadBtn').addEventListener('click', downloadTimetable);",
+"el('timetableFile').addEventListener('change', readTimetableFile);",
+"el('timetableSaveBtn').addEventListener('click', saveTimetable);",
 "buildListRows();",
 "showTab('about');",
 "</script>",
@@ -827,6 +958,50 @@ static esp_err_t web_course_post(httpd_req_t *req)
     return web_send_result(req, true, "课表已保存，墨水屏正在刷新", "200 OK");
 }
 
+/* ========================= 完整课程表导入 ========================= */
+
+static esp_err_t web_timetable_get(httpd_req_t *req)
+{
+    char *json = Timetable_ToJson();
+    esp_err_t ret;
+
+    if (json == NULL) {
+        return httpd_resp_send_500(req);
+    }
+
+    httpd_resp_set_type(req, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    ret = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(json);
+
+    return ret;
+}
+
+static esp_err_t web_timetable_post(httpd_req_t *req)
+{
+    char *body = NULL;
+    char err_msg[160] = { 0 };
+    const char *status = "400 Bad Request";
+    esp_err_t ret;
+
+    ret = web_read_json_body(req, WEB_TIMETABLE_BODY_MAX, &body, &status, err_msg, sizeof(err_msg));
+    if (ret != ESP_OK) {
+        return web_send_result(req, false, err_msg, status);
+    }
+
+    ret = Timetable_ApplyJson(body, err_msg, sizeof(err_msg));
+    free(body);
+
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "导入课程表失败：%s（%s）", err_msg, esp_err_to_name(ret));
+        return web_send_result(req, false, (err_msg[0] != '\0') ? err_msg : "导入失败",
+                               "400 Bad Request");
+    }
+
+    ESP_LOGI(TAG, "网页已导入课程表：%s", err_msg);
+    return web_send_result(req, true, err_msg, "200 OK");
+}
+
 /* ========================= 清单（待办事项） ========================= */
 
 static esp_err_t web_checklist_get(httpd_req_t *req)
@@ -913,6 +1088,8 @@ esp_err_t http_web_register(httpd_handle_t server)
         { .uri = "/api/course",    .method = HTTP_POST, .handler = web_course_post,    .user_ctx = NULL },
         { .uri = "/api/checklist", .method = HTTP_GET,  .handler = web_checklist_get,  .user_ctx = NULL },
         { .uri = "/api/checklist", .method = HTTP_POST, .handler = web_checklist_post, .user_ctx = NULL },
+        { .uri = "/api/timetable", .method = HTTP_GET,  .handler = web_timetable_get,  .user_ctx = NULL },
+        { .uri = "/api/timetable", .method = HTTP_POST, .handler = web_timetable_post, .user_ctx = NULL },
         { .uri = "/favicon.ico",   .method = HTTP_GET,  .handler = web_favicon_get,    .user_ctx = NULL },
     };
     esp_err_t ret;
@@ -929,6 +1106,6 @@ esp_err_t http_web_register(httpd_handle_t server)
         }
     }
 
-    ESP_LOGI(TAG, "网页路由注册完成：关于设备 / 设置课程表 / 清单");
+    ESP_LOGI(TAG, "网页路由注册完成：关于设备 / 设置课程表 / 清单 / 导入课程表");
     return ESP_OK;
 }
