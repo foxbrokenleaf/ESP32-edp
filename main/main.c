@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-26 21:56:09
+ * @LastEditTime: 2026-11-26 22:02:44
  * @FilePath: \epd\main\main.c
  * @Description: 应用程序入口
  */
@@ -19,6 +19,7 @@
 #include "GUI.h"
 #include "bsp_rtc.h"
 #include "bsp_http.h"
+#include "DataStruct.h"
 #include "GT30L32S4W.h"
 #include "bsp_GT30L32S4W.h"
 #include "WT588F.h"
@@ -65,6 +66,9 @@ static void App_NvsInit(void)
 void app_main(void)
 {
     App_NvsInit();
+
+    /* Load course settings saved by the web page (defaults when NVS is empty). */
+    Course_Init();
 
     EPD_Init();
 
@@ -161,6 +165,8 @@ void SW2_Key(bsp_key_event_t event, void *user_ctx){
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "voice: play %d failed: %s", APP_VOICE_TEST_ADDR, esp_err_to_name(err));
     }
+    GuiUpdate();
+
 }
 
 void SW1_Key(bsp_key_event_t event, void *user_ctx){

@@ -7,6 +7,7 @@
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #include "bsp_http.h"
+#include "http.h"
 
 static const char *TAG = "BSP_HTTP";
 httpd_handle_t server;
@@ -84,7 +85,12 @@ static httpd_handle_t start_webserver(void)
 
     // Set URI handlers
     ESP_LOGI(TAG, "Registering URI handlers");
-    // httpd_register_uri_handler(server, &XXXXXXXXX);
+    esp_err_t reg_err = http_web_register(server);
+    if (reg_err != ESP_OK) {
+        ESP_LOGE(TAG, "register web uri handlers failed: %s", esp_err_to_name(reg_err));
+        httpd_stop(server);
+        return NULL;
+    }
 
 
     return server;

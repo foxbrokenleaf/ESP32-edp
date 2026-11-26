@@ -24,34 +24,12 @@
 #include "esp_err.h"
 #include "esp_rtc_time.h"
 #include "bsp_rtc.h"
+#include "DataStruct.h"
 
 uint8_t layout_no = 1;
 
-/* ==================== 当日课表数据 ==================== */
-/*
- * 说明：下列变量目前是演示数据（还没接课表数据源），
- *       接入 HTTP / 配网下发的课表后直接覆盖这些变量即可，界面会自动跟着变。
- */
-enum __Course_Lesson_Status__ {
-    COURSE_LESSON_NULL = 0,
-    COURSE_LESSON_READY,
-    COURSE_LESSON_NOW
-} Course_Lesson_Status = COURSE_LESSON_NOW;
-
-enum __Course_Lesson_Type__ {
-    COURSE_LESSON_THEORETICAL = 0,
-    COURSE_LESSON_PRACTICAL
-} Course_Lesson_Type = COURSE_LESSON_THEORETICAL;
-
-enum __Course_Lesson_Postion__ {
-    COURSE_LESSON_TEACHING = 0,
-    COURSE_LESSON_TECHNOLOGY
-} Course_Lesson_Postion = COURSE_LESSON_TEACHING;
-
-char Course_Lesson_Postion_Str[4] = {'A', '1', '0', '2'};   /* [0] 保留，[1..3] 为房间号 */
-char Course_Lesson_Time[] = "08:00~09:40";                   /* 上课时间，格式 HH:MM~HH:MM */
-char Semester_Week_Now = 12;                                 /* 学期第几周 */
-
+/* ==================== Course data ==================== */
+/* Course_* variables are defined in DataStruct.c, updated by the web page and saved in NVS. */
 /* 课程名（演示数据） */
 static const char *const s_course_name_en = "Android";
 static const char *const s_course_name_cn = "开发技术";
