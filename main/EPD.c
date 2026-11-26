@@ -10,6 +10,10 @@
 #include "freertos/task.h"
 #include "esp_rom_sys.h"
 
+#include "esp_log.h"
+
+static const char *TAG = "EP Display";
+
 /* ==================== 引脚定义（按实际接线修改） ==================== */
 #define EPD_BUSY_PIN    33
 #define EPD_RST_PIN     13
@@ -217,8 +221,8 @@ void EPD_WriteData(uint8_t Data)
 void EPD_BUSY_Wait(void)
 {
 #if EPD_BUSY_CONNECTED
-    /* 高电平为忙，等它变低 */
-    while (EPD_BUSY_READ() != 0) {
+    /* 低电平为忙，等它变高 */
+    while (EPD_BUSY_READ() != 1) {
         delay_ms(10);
     }
 #else
@@ -322,6 +326,8 @@ void EPD_Update(void)
 
     EPD_WriteCommand(EPD_CMD_POWER_OFF);
     delay_ms(100);
+
+    ESP_LOGI(TAG, "E-Paper display update done!");
 }
 
 void EPD_UpdateArea(int16_t X, int16_t Y, uint16_t Width, uint16_t Height)
