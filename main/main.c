@@ -2,9 +2,9 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-18 21:19:03
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-25 17:07:49
+ * @LastEditTime: 2026-11-26 21:56:09
  * @FilePath: \epd\main\main.c
- * @Description: åº”ç”¨ç¨‹åºå…¥å£
+ * @Description: Ó¦ÓÃ³ÌĞòÈë¿Ú
  */
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -28,14 +28,14 @@
 static const char *TAG = "MAIN";
 
 /*
- * ä¸Šç”µæ•´æœºè‡ªæ£€ï¼ˆNVS / å­—åº“ / EPD / è¯­éŸ³ / æŒ‰é”® / RTCï¼‰ï¼š
- *   1 = å¼€æœºè·‘ä¸€æ¬¡ï¼Œä¸²å£æ‰“è¡¨æ ¼ + å¢¨æ°´å±å‡ºç»“æœé¡µï¼ˆè¯­éŸ³é¡¹ä¼šçœŸçš„æ’­ä¸€æ®µï¼‰ï¼›
- *   0 = å…³é—­ï¼Œå¼€æœºç›´æ¥è¿›ä¸šåŠ¡ã€‚
- * å•é¡¹å¼€å…³åœ¨ app_selftest.h é‡Œï¼ˆAPP_SELFTEST_TEST_xxxï¼‰ã€‚
+ * ÉÏµçÕû»ú×Ô¼ì£¨NVS / ×Ö¿â / EPD / ÓïÒô / °´¼ü / RTC£©£º
+ *   1 = ¿ª»úÅÜÒ»´Î£¬´®¿Ú´ò±í¸ñ + Ä«Ë®ÆÁ³ö½á¹ûÒ³£¨ÓïÒôÏî»áÕæµÄ²¥Ò»¶Î£©£»
+ *   0 = ¹Ø±Õ£¬¿ª»úÖ±½Ó½øÒµÎñ¡£
+ * µ¥Ïî¿ª¹ØÔÚ app_selftest.h Àï£¨APP_SELFTEST_TEST_xxx£©¡£
  */
 #define APP_SELFTEST_BOOT       1
 
-/* è¯­éŸ³å·¥ç¨‹é‡Œè¦æ’­çš„æ®µåœ°å€ï¼ŒæŒ‰å®é™…å·¥ç¨‹æ”¹ï¼ˆå•å­—èŠ‚ 0~223 / åŒå­—èŠ‚ 0~999ï¼‰ */
+/* ÓïÒô¹¤³ÌÀïÒª²¥µÄ¶ÎµØÖ·£¬°´Êµ¼Ê¹¤³Ì¸Ä£¨µ¥×Ö½Ú 0~223 / Ë«×Ö½Ú 0~999£© */
 #define APP_VOICE_TEST_ADDR     1
 
 void SW3_Key(bsp_key_event_t event, void *user_ctx);
@@ -43,7 +43,7 @@ void SW2_Key(bsp_key_event_t event, void *user_ctx);
 void SW1_Key(bsp_key_event_t event, void *user_ctx);
 
 /**
- * @brief åˆå§‹åŒ– NVSï¼šå…¼å®¹"åˆ†åŒºå†™æ»¡/ç‰ˆæœ¬å‡çº§"å¯¼è‡´çš„å¯åŠ¨æ­»å¾ªç¯
+ * @brief ³õÊ¼»¯ NVS£º¼æÈİ"·ÖÇøĞ´Âú/°æ±¾Éı¼¶"µ¼ÖÂµÄÆô¶¯ËÀÑ­»·
  */
 static void App_NvsInit(void)
 {
@@ -60,7 +60,7 @@ static void App_NvsInit(void)
     }
 }
 
-/* è¯­éŸ³çš„ä¸Šç”µéªŒè¯å·²å¹¶å…¥æ•´æœºè‡ªæ£€ï¼ˆapp_selftest.c çš„ VOICE é¡¹ï¼‰ï¼Œæ­¤å¤„ä¸å†å•ç‹¬å®ç° */
+/* ÓïÒôµÄÉÏµçÑéÖ¤ÒÑ²¢ÈëÕû»ú×Ô¼ì£¨app_selftest.c µÄ VOICE Ïî£©£¬´Ë´¦²»ÔÙµ¥¶ÀÊµÏÖ */
 
 void app_main(void)
 {
@@ -79,17 +79,17 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "GT30L32S4W self test failed: %s", esp_err_to_name(err));
 
-        /* è‡ªæ£€å¤±è´¥ï¼šæ‰«ä¸€éå€™é€‰å¼•è„šï¼Œçœ‹å­—åº“åˆ°åº•æ¥åœ¨å“ªå‡ ä¸ªè„šä¸Š */
+        /* ×Ô¼ìÊ§°Ü£ºÉ¨Ò»±éºòÑ¡Òı½Å£¬¿´×Ö¿âµ½µ×½ÓÔÚÄÄ¼¸¸ö½ÅÉÏ */
         (void)bsp_gt30l32s4w_bus_probe();
 
         /*
-         * å†ç”¨ 100Hz çš„èŠ‚å¥åœ¨ CS#/SCLK/SI ä¸Šæ‰“ä¸€æ®µæ–¹æ³¢ï¼š
-         * ç¤ºæ³¢å™¨æŒ‚åœ¨ GPIO23(CS#) ä¸Šã€ä¸‹é™æ²¿è§¦å‘ã€1ms/div å°±èƒ½ç¡®è®¤
-         * MCU æ˜¯å¦çœŸçš„åœ¨ç‰‡é€‰ï¼ˆæœ‰æ³¢å½¢ = MCU åœ¨é©±åŠ¨ï¼Œæ— æ³¢å½¢ = å¼•è„šæ²¡é€š/è¢«åˆ«å¤„å ç”¨ï¼‰ã€‚
-         * æ—¶é•¿ç”± BSP_GT30L32S4W_FAIL_TOGGLE_MS æ§åˆ¶ï¼Œæ”¹æˆ 0 å¯å…³é—­ã€‚
+         * ÔÙÓÃ 100Hz µÄ½Ú×àÔÚ CS#/SCLK/SI ÉÏ´òÒ»¶Î·½²¨£º
+         * Ê¾²¨Æ÷¹ÒÔÚ GPIO23(CS#) ÉÏ¡¢ÏÂ½µÑØ´¥·¢¡¢1ms/div ¾ÍÄÜÈ·ÈÏ
+         * MCU ÊÇ·ñÕæµÄÔÚÆ¬Ñ¡£¨ÓĞ²¨ĞÎ = MCU ÔÚÇı¶¯£¬ÎŞ²¨ĞÎ = Òı½ÅÃ»Í¨/±»±ğ´¦Õ¼ÓÃ£©¡£
+         * Ê±³¤ÓÉ BSP_GT30L32S4W_FAIL_TOGGLE_MS ¿ØÖÆ£¬¸Ä³É 0 ¿É¹Ø±Õ¡£
          *
-         * è¿™é‡Œä¸å†å•ç‹¬åˆ·å±/ç­‰å¾…ï¼šå­—åº“å¤±è´¥ä¼šç”±ä¸‹é¢çš„æ•´æœºè‡ªæ£€ç»“æœé¡µ
-         * ï¼ˆFONT FAILï¼‰ç»Ÿä¸€æ˜¾ç¤ºï¼Œé¿å…ä¸€ä¸Šç”µè¿åˆ·ä¸¤æ¬¡å±ã€‚
+         * ÕâÀï²»ÔÙµ¥¶ÀË¢ÆÁ/µÈ´ı£º×Ö¿âÊ§°Ü»áÓÉÏÂÃæµÄÕû»ú×Ô¼ì½á¹ûÒ³
+         * £¨FONT FAIL£©Í³Ò»ÏÔÊ¾£¬±ÜÃâÒ»ÉÏµçÁ¬Ë¢Á½´ÎÆÁ¡£
          */
 #if (BSP_GT30L32S4W_FAIL_TOGGLE_MS > 0)
         (void)bsp_gt30l32s4w_pin_toggle_test(BSP_GT30L32S4W_FAIL_TOGGLE_MS);
@@ -101,12 +101,12 @@ void app_main(void)
     bsp_rtc_init();
 
     /*
-     * è¯­éŸ³èŠ¯ç‰‡ï¼šä¸Šç”µé»˜è®¤ä¸€çº¿ä¸²å£ + å•å­—èŠ‚å‘ç ï¼ˆå¿…é¡»ä¸è¯­éŸ³å·¥ç¨‹çƒ§å†™æ—¶çš„è®¾å®šä¸€è‡´ï¼Œ
-     * ä¸ä¸€è‡´æ—¶ç”¨ WT588F_SetWireMode()/WT588F_SetAddressMode() æ”¹ï¼‰ã€‚
-     * æ²¡æ¥èŠ¯ç‰‡æ—¶åªæ‰“å‘Šè­¦ï¼Œä¸å½±å“å…¶å®ƒåŠŸèƒ½ã€‚
-     * ç”¨æ³•ï¼šWT588F_Play(æ®µåœ°å€);            // ç«‹å³è¿”å›
+     * ÓïÒôĞ¾Æ¬£ºÉÏµçÄ¬ÈÏÒ»Ïß´®¿Ú + µ¥×Ö½Ú·¢Âë£¨±ØĞëÓëÓïÒô¹¤³ÌÉÕĞ´Ê±µÄÉè¶¨Ò»ÖÂ£¬
+     * ²»Ò»ÖÂÊ±ÓÃ WT588F_SetWireMode()/WT588F_SetAddressMode() ¸Ä£©¡£
+     * Ã»½ÓĞ¾Æ¬Ê±Ö»´ò¸æ¾¯£¬²»Ó°ÏìÆäËü¹¦ÄÜ¡£
+     * ÓÃ·¨£ºWT588F_Play(¶ÎµØÖ·);            // Á¢¼´·µ»Ø
      *       WT588F_SetVolume(0~15);
-     *       WT588F_PlayAndWait(æ®µåœ°å€, 5000); // ç­‰æ’­å®Œï¼Œéœ€è¦ BUSY æ¥çº¿
+     *       WT588F_PlayAndWait(¶ÎµØÖ·, 5000); // µÈ²¥Íê£¬ĞèÒª BUSY ½ÓÏß
      */
     err = WT588F_Init();
     if (err != ESP_OK) {
@@ -117,11 +117,11 @@ void app_main(void)
 
 #if APP_SELFTEST_BOOT
     /*
-     * æ•´æœºè‡ªæ£€ï¼šä¸²å£æ‰“è¡¨æ ¼ + å¢¨æ°´å±å‡ºç»“æœé¡µã€‚
-     * è¯­éŸ³é¡¹ä¼šçœŸçš„æ’­ä¸€æ®µï¼ˆAPP_SELFTEST_VOICE_ADDRï¼‰ï¼Œå¹¶é‡‡æ · BUSY åˆ¤æ–­èŠ¯ç‰‡æ˜¯å¦å“åº”ï¼š
-     *   PASS ä½†æ²¡å£°éŸ³   -> æŸ¥åŠŸæ”¾/å–‡å­ï¼›
-     *   FAIL(no busy)  -> æŸ¥ä¸€çº¿/ä¸¤çº¿è®¾å®šã€é—¨æ§ç”µå¹³ï¼ˆAU_CLK_O â‰ˆ2.6Vï¼‰ã€CS è„šã€‚
-     * è‡ªæ£€å†…éƒ¨çš„å­—åº“/è¯­éŸ³/EPD è°ƒç”¨æ˜¯é¡ºåºæ‰§è¡Œçš„ï¼Œä¸ä¼šåœ¨å…±ç”¨æ€»çº¿ï¼ˆGPIO26/25ï¼‰ä¸Šæ‰“æ¶ã€‚
+     * Õû»ú×Ô¼ì£º´®¿Ú´ò±í¸ñ + Ä«Ë®ÆÁ³ö½á¹ûÒ³¡£
+     * ÓïÒôÏî»áÕæµÄ²¥Ò»¶Î£¨APP_SELFTEST_VOICE_ADDR£©£¬²¢²ÉÑù BUSY ÅĞ¶ÏĞ¾Æ¬ÊÇ·ñÏìÓ¦£º
+     *   PASS µ«Ã»ÉùÒô   -> ²é¹¦·Å/À®°È£»
+     *   FAIL(no busy)  -> ²éÒ»Ïß/Á½ÏßÉè¶¨¡¢ÃÅ¿ØµçÆ½£¨AU_CLK_O ¡Ö2.6V£©¡¢CS ½Å¡£
+     * ×Ô¼ìÄÚ²¿µÄ×Ö¿â/ÓïÒô/EPD µ÷ÓÃÊÇË³ĞòÖ´ĞĞµÄ£¬²»»áÔÚ¹²ÓÃ×ÜÏß£¨GPIO26/25£©ÉÏ´ò¼Ü¡£
      */
     (void)app_selftest_run_and_show(NULL);
 #endif
@@ -131,7 +131,7 @@ void app_main(void)
     Https_Init();
     ESP_LOGI(TAG, "net init done");
 
-    // ç½‘ç»œåˆå§‹åŒ–å®Œæˆåå¯åŠ¨ SNTPï¼Œé¦–æ¬¡åŒæ­¥æˆåŠŸåæ—¶é—´ä¼šå†™å…¥ NVS
+    // ÍøÂç³õÊ¼»¯Íê³ÉºóÆô¶¯ SNTP£¬Ê×´ÎÍ¬²½³É¹¦ºóÊ±¼ä»áĞ´Èë NVS
     bsp_sntp_init();
 
     // CourseGUI();    
@@ -144,16 +144,18 @@ void app_main(void)
 
 
 void SW3_Key(bsp_key_event_t event, void *user_ctx){
-    layout_no--;
-    ESP_LOGI(TAG, "SW3_Key");
+    /* ÉÏÒ»Ò³£º»·ĞÎ»ØÈÆ£¬±ÜÃâ layout_no-- ÔÚ 0 Ê±ÏÂÒç³É 255 */
+    layout_no = (uint8_t)((layout_no + GUI_LAYOUT_COUNT - 1) % GUI_LAYOUT_COUNT);
+    GuiUpdate();
+    ESP_LOGI(TAG, "SW3_Key layout=%d", (int)layout_no);
 }
 
 void SW2_Key(bsp_key_event_t event, void *user_ctx){
     ESP_LOGI(TAG, "SW2_Key");
 
     /*
-     * æŒ‰é”®æ’­ä¸€æ®µï¼šé¡ºå¸¦éªŒè¯â€œåœ¨åˆ«çš„ä»»åŠ¡é‡Œå‘ç â€ä¹Ÿå®‰å…¨
-     * ï¼ˆè¯­éŸ³ BSP å†…éƒ¨æœ‰äº’æ–¥é”ï¼Œä¸€å¸§çº¦ 13ms å¿™ç­‰ï¼Œå ä½æ‰«æä»»åŠ¡çš„æ—¶é—´å¯æ¥å—ï¼‰ã€‚
+     * °´¼ü²¥Ò»¶Î£ºË³´øÑéÖ¤¡°ÔÚ±ğµÄÈÎÎñÀï·¢Âë¡±Ò²°²È«
+     * £¨ÓïÒô BSP ÄÚ²¿ÓĞ»¥³âËø£¬Ò»Ö¡Ô¼ 13ms Ã¦µÈ£¬Õ¼×¡É¨ÃèÈÎÎñµÄÊ±¼ä¿É½ÓÊÜ£©¡£
      */
     esp_err_t err = WT588F_Play(APP_VOICE_TEST_ADDR);
     if (err != ESP_OK) {
@@ -162,6 +164,8 @@ void SW2_Key(bsp_key_event_t event, void *user_ctx){
 }
 
 void SW1_Key(bsp_key_event_t event, void *user_ctx){
-    ESP_LOGI(TAG, "SW1_Key");
-    layout_no++;
+    /* ÏÂÒ»Ò³£º»·ĞÎÇĞ»» */
+    layout_no = (uint8_t)((layout_no + 1) % GUI_LAYOUT_COUNT);
+    GuiUpdate();
+    ESP_LOGI(TAG, "SW1_Key layout=%d", (int)layout_no);
 }

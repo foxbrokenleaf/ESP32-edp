@@ -2,7 +2,7 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-09-21 23:42:40
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 13:26:20
+ * @LastEditTime: 2026-11-26 21:28:58
  * @FilePath: \RMS5000-BlackBoxByESP32\main\bsp_rtc.c
  * @Description: RTC模块
  * 
@@ -527,17 +527,7 @@ static void rtc_update_task(void *arg)
     ESP_LOGI(TAG, "rtc_update_task running");
 
     while (1) {
-        switch (layout_no)
-        {
-        case 0:
-            CourseGUI();
-            break;
-        case 1:
-            ClockGUI();
-            break;
-        default:
-            break;
-        }
+        GuiUpdate();
         
         // 使用 vTaskDelayUntil 保证周期稳定，不随任务执行时间漂移
         vTaskDelayUntil(&last_wake, period);

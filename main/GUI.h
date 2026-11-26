@@ -2,18 +2,29 @@
  * @Author: 'foxbrokenleaf' '2353919304@qq.com'
  * @Date: 2026-10-19 20:12:05
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
- * @LastEditTime: 2026-11-02 13:27:06
+ * @LastEditTime: 2026-11-26 21:40:00
  * @FilePath: \epd\main\GUI.h
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ * @Description: 界面（GUI）对外接口。
+ *               页面在 GUI.c 里实现：0=课程表, 1=时钟, 2=日历，
+ *               用 layout_no 选页，改 GUI_LAYOUT_COUNT 即可增删页面。
  */
 #ifndef __GUI_H__
 #define __GUI_H__
 
 #include <stdint.h>
 
+/* 界面总数：底部页码点、按键翻页都会跟着这个宏走 */
+#define GUI_LAYOUT_COUNT        3
+
+/* 当前显示的界面编号（0 ~ GUI_LAYOUT_COUNT-1） */
 extern uint8_t layout_no;
 
+/* 按 layout_no 重绘整个屏幕 */
+void GuiUpdate(void);
+
+/* 各界面（GUI.c 内部使用，也允许外部单独调用） */
 void CourseGUI(void);
 void ClockGUI(void);
+void CalendarGUI(void);
 
-#endif
+#endif /* __GUI_H__ */
