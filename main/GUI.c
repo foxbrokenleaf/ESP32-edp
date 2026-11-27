@@ -4,7 +4,7 @@
  * @LastEditors: 'foxbrokenleaf' '2353919304@qq.com'
  * @LastEditTime: 2026-11-26 21:59:45
  * @FilePath: \epd\main\GUI.c
- * @Description: 墨水屏界面（完整课表 / 时钟 / 日历 / 清单）
+ * @Description: 墨水屏界面（当前课程 / 时钟 / 日历 / 清单）
  *
  * 统一视觉风格：
  *   1. 顶部：黑色圆角标题栏，白字左标题 + 右信息；
@@ -33,10 +33,6 @@ uint8_t layout_no = 1;
 
 /* ==================== Course data ==================== */
 /* Course_* variables are defined in DataStruct.c, updated by the web page and saved in NVS. */
-/* 课程名（演示数据） */
-static const char *const s_course_name_en = "Android";
-static const char *const s_course_name_cn = "开发技术";
-
 /* ===== 调试开关：1=把逻辑显存抽样成字符画打印到串口 =====
  * 用途：区分"内容根本没画进显存" 和 "画进去了但没刷到屏上"
  * 定位完成后改成 0 即可关闭（不影响功能） */
@@ -75,16 +71,10 @@ static void GUI_DebugDump(void)
 #endif
 
 /* ==================== 函数声明 ==================== */
-void CourseGUI(void);
 void ClockGUI(void);
 void CalendarGUI(void);
 void ListGUI(void);
 
-uint8_t str_len(const char *str){
-    uint8_t res = 0;
-    for(int i = 0;str[i] != '\0';i++) res++;
-    return res;
-}
 
 void GuiUpdate(void){
     if (layout_no >= GUI_LAYOUT_COUNT) {
@@ -94,7 +84,7 @@ void GuiUpdate(void){
     switch (layout_no)
     {
     case 0:
-        TimetableGUI(Semester_Week_Now);
+        TimetableGUI();
         break;
     case 1:
         ClockGUI();
@@ -316,55 +306,6 @@ static int Gui_WeekOfYear(const struct tm *t)
     return (week < 1) ? 1 : week;
 }
 
-/* 课表状态文案 */
-static const char *Gui_CourseStatusText(void)
-{
-    switch (Course_Lesson_Status) {
-    case COURSE_LESSON_READY:
-        return "准备上课";
-    case COURSE_LESSON_NOW:
-        return "正在上课";
-    case COURSE_LESSON_NULL:
-    default:
-        return "今日无课";
-    }
-}
-
-/* 本节课程进度：0~100；时间格式不对/没有课返回 false */
-static bool Course_Lesson_Progress(uint8_t *percent)
-{
-    struct tm tm_now;
-    int h1 = 0, m1 = 0, h2 = 0, m2 = 0;
-    int start, end, now;
-
-    if (percent == NULL) {
-        return false;
-    }
-    *percent = 0;
-
-    if (sscanf(Course_Lesson_Time, "%d:%d~%d:%d", &h1, &m1, &h2, &m2) != 4) {
-        return false;
-    }
-    start = h1 * 60 + m1;
-    end   = h2 * 60 + m2;
-    if (end <= start) {
-        return false;
-    }
-    if (rtc_get_time(&tm_now) != ESP_OK) {
-        return false;
-    }
-
-    now = tm_now.tm_hour * 60 + tm_now.tm_min;
-    if (now <= start) {
-        *percent = 0;
-    } else if (now >= end) {
-        *percent = 100;
-    } else {
-        *percent = (uint8_t)((now - start) * 100 / (end - start));
-    }
-    return true;
-}
-
 /* ========================= 公共版面块 ========================= */
 
 /* 顶部黑色圆角标题栏：左边标题，右边补充信息（都按白字黑底画） */
@@ -421,114 +362,6 @@ static void Gui_Flush(void)
     /* 若这里耗时远小于 EPD_BUSY_FIXED_DELAY_MS，说明刷新等待没生效 */
     ESP_LOGI(TAG, "EPD_Update took %d ms", (int)((esp_timer_get_time() - t_refresh_us) / 1000));
 #endif
-}
-
-/* ========================= 课程表界面 ========================= */
-void CourseGUI(void)
-{
-    struct tm tm_now;
-    char buf[64];
-    uint8_t percent = 0;
-    int h1 = 0, m1 = 0, h2 = 0, m2 = 0;
-    bool time_ok;
-
-    if (rtc_get_time(&tm_now) != ESP_OK) {
-        memset(&tm_now, 0, sizeof(tm_now));
-    }
-
-    EPD_Clear();
-
-    /* ---------- 顶部标题栏：日期 + 时间 ---------- */
-    snprintf(buf, sizeof(buf), "%02d-%02d %02d:%02d",
-             tm_now.tm_mon + 1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min);
-    Gui_DrawHeader("课程表", buf);
-
-    /* ---------- 左卡片：上课状态 + 上下课时间 ---------- */
-    Gui_DrawRoundRect(GUI_MARGIN, GUI_CARD_Y, 90, GUI_CARD_H, 8);
-
-    /* 状态胶囊：黑底白字 */
-    {
-        const char *status = Gui_CourseStatusText();
-        int16_t tw = Gui_MeasureText(status, GT30L32S4W_FONT_ASCII_8X16,
-                                    GT30L32S4W_FONT_GB2312_16X16);
-
-        Gui_FillRoundRect(8, 28, 78, 20, 9);
-        GT30L32S4W_ShowString((int16_t)(8 + (78 - tw) / 2), 30, status,
-                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 1);
-    }
-
-    /* 开始 / 结束时间（12x24 数字，居中排布） */
-    time_ok = (sscanf(Course_Lesson_Time, "%d:%d~%d:%d", &h1, &m1, &h2, &m2) == 4);
-
-    GT30L32S4W_ShowString(17, 50, "开始",
-                          GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-    snprintf(buf, sizeof(buf), time_ok ? "%02d:%02d" : "--:--", h1, m1);
-    GT30L32S4W_ShowString(17, 62, buf,
-                          GT30L32S4W_FONT_ASCII_12X24, GT30L32S4W_FONT_GB2312_12X12, 0);
-
-    GT30L32S4W_ShowString(17, 88, "结束",
-                          GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-    snprintf(buf, sizeof(buf), time_ok ? "%02d:%02d" : "--:--", h2, m2);
-    GT30L32S4W_ShowString(17, 100, buf,
-                          GT30L32S4W_FONT_ASCII_12X24, GT30L32S4W_FONT_GB2312_12X12, 0);
-
-    /* ---------- 右卡片：课程信息 ---------- */
-    Gui_DrawRoundRect(98, GUI_CARD_Y, 196, GUI_CARD_H, 8);
-
-    /* 英文课程名（Arial 24） */
-    GT30L32S4W_ShowString(110, 29, s_course_name_en,
-                          GT30L32S4W_FONT_ASCII_24_ARIAL, GT30L32S4W_FONT_GB2312_16X16, 0);
-
-    /* 中文课程名（32x32） */
-    GT30L32S4W_ShowString(110, 55, s_course_name_cn,
-                          GT30L32S4W_FONT_ASCII_16X32, GT30L32S4W_FONT_GB2312_32X32, 0);
-
-    /* 课程类型胶囊（空心） */
-    {
-        const char *type = Course_Lesson_Type ? "实践课" : "理论课";
-
-        Gui_DrawRoundRect(110, 91, 72, 20, 9);
-        GT30L32S4W_ShowString(122, 94, type,
-                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 0);
-    }
-
-    /* 上课地点：教-A102 / 科-A102（右对齐到卡片内边） */
-    {
-        const char *prefix = (Course_Lesson_Postion == COURSE_LESSON_TEACHING) ? "教" : "科";
-        char loc[8];
-
-        loc[0] = prefix[0];
-        loc[1] = prefix[1];
-        loc[2] = '-';
-        loc[3] = Course_Lesson_Postion_Str[1];
-        loc[4] = Course_Lesson_Postion_Str[2];
-        loc[5] = Course_Lesson_Postion_Str[3];
-        loc[6] = '\0';
-
-        GT30L32S4W_ShowString(231, 94, loc,
-                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 0);
-    }
-
-    /* 本节进度：进度条 + 百分比 */
-    {
-        if (!Course_Lesson_Progress(&percent)) {
-            percent = 0;
-        }
-
-        GT30L32S4W_ShowString(110, 112, "进度",
-                              GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-        Gui_DrawProgressBar(140, 113, 142, 8, percent);
-    }
-
-    /* ---------- 底部状态栏 ---------- */
-    {
-        char foot[64];
-
-        snprintf(foot, sizeof(foot), "学期第 %d 周", (int)Semester_Week_Now);
-        Gui_DrawFooter(foot);
-    }
-
-    Gui_Flush();
 }
 
 /* ========================= 时钟界面 ========================= */
@@ -733,72 +566,26 @@ static int16_t Gui_ShowUtf8String(int16_t x, int16_t y, const char *utf8)
     return Gui_Gb2312TextWidth(gbk);
 }
 
-/* ========================= 完整课表界面（NVS 导入数据） ========================= */
+/* ========================= 课程界面（当前 / 下一节） ========================= */
 /*
- * 网页导入的完整课程表保存在 NVS，上电时由 Timetable_Init() 载入到
- * Timetable_Courses[]。本页按参数 week（学期周次）筛选 CourseSessions，
- * 把该周的上课时段按节次顺序列出来。
- *
- * 说明：CourseSessions 里只有周次和节次，没有星期几，因此这里按
- * “第几节”排序显示，而不是按周一到周日画网格。
+ * 课程页只显示“现在正在上”或“今天下一节”的课程：
+ * - 按 RTC 的星期、当前学期周次和 HH:MM 时间筛选；
+ * - 现在没有课就找今天最近的一节；今天没有后续课程则显示“今天已无课程”；
+ * - day=0 的旧版课程没有星期信息，不参与筛选。
  */
 
-#define GUI_TIMETABLE_ROW_MAX       8       /* 内容区可放 8 行（12px/行） */
-#define GUI_TIMETABLE_ROW_STEP      12
-#define GUI_TIMETABLE_ROW_TOP       28
-#define GUI_TIMETABLE_PERIOD_X      6
-#define GUI_TIMETABLE_TIME_X        38      /* 上课时间列（HH:MM） */
-#define GUI_TIMETABLE_NAME_X        108
-#define GUI_TIMETABLE_ROOM_W        54      /* 右侧教室列宽度（像素） */
+#define GUI_COURSE_NAME_MAX_W   (GUI_W - 20)
 
-typedef struct {
-    uint8_t     start;                  /* 开始节次 */
-    uint8_t     end;                    /* 结束节次 */
-    const char *name;                   /* UTF-8 课程名 */
-    const char *classroom;              /* UTF-8 教室，可为空串 */
-    const char *start_time;             /* "HH:MM" 上课时间，可为空串 */
-    const char *end_time;               /* "HH:MM" 下课时间，可为空串 */
-} gui_timetable_row_t;
-
-/* 排序：先开始节次，再结束节次，最后按课程名（保证输出顺序稳定） */
-static int Gui_TimetableRowCompare(const gui_timetable_row_t *a, const gui_timetable_row_t *b)
+/* 把 "HH:MM" 转成分钟；Timetable 已校验格式 */
+static uint16_t Gui_TimeToMinutes(const char *text)
 {
-    if (a->start != b->start) {
-        return (a->start < b->start) ? -1 : 1;
-    }
-    if (a->end != b->end) {
-        return (a->end < b->end) ? -1 : 1;
-    }
-    return strcmp(a->name, b->name);
+    return (uint16_t)(((text[0] - '0') * 10 + (text[1] - '0')) * 60 +
+                      (text[3] - '0') * 10 + (text[4] - '0'));
 }
 
-/*
- * 把一行插入到按节次排序的定长数组里。
- * 数组已满时，比最后一行还晚的时段直接丢弃，保证显示的是最早的 8 行。
- */
-static void Gui_TimetableRowInsert(gui_timetable_row_t *rows, uint8_t *count,
-                                   uint8_t row_max, const gui_timetable_row_t *row)
-{
-    uint8_t pos;
-
-    if (*count < row_max) {
-        pos = *count;
-        (*count)++;
-    } else if (Gui_TimetableRowCompare(row, &rows[row_max - 1]) >= 0) {
-        return;
-    } else {
-        pos = (uint8_t)(row_max - 1);
-    }
-
-    while (pos > 0 && Gui_TimetableRowCompare(row, &rows[pos - 1]) < 0) {
-        rows[pos] = rows[pos - 1];
-        pos--;
-    }
-    rows[pos] = *row;
-}
-
-/* 按像素宽度截断 GB2312 文本：ASCII 6px、汉字 12px（与 6x12/12x12 字库一致） */
-static void Gui_TruncateGb2312(char *gbk, int16_t max_width)
+/* 按像素宽度截断 GB2312 文本（ascii_w / han_w 为对应字体单字宽度） */
+static void Gui_TruncateGb2312(char *gbk, int16_t max_width,
+                               int16_t ascii_w, int16_t han_w)
 {
     const uint8_t *p = (const uint8_t *)gbk;
     int16_t w = 0;
@@ -806,155 +593,184 @@ static void Gui_TruncateGb2312(char *gbk, int16_t max_width)
 
     while (p[used] != '\0') {
         if (p[used] < 0x80) {
-            if (w + 6 > max_width) {
+            if (w + ascii_w > max_width) {
                 break;
             }
-            w = (int16_t)(w + 6);
-            used += 1;
+            w += ascii_w;
+            used++;
         } else {
-            if (p[used + 1] == '\0' || w + 12 > max_width) {
+            if (p[used + 1] == '\0' || w + han_w > max_width) {
                 break;
             }
-            w = (int16_t)(w + 12);
+            w += han_w;
             used += 2;
         }
     }
     gbk[used] = '\0';
 }
 
-/*
- * 参数 week：要显示的学期周次（1~53）。
- * 传入 0 或越界时回退到网页设置的 Semester_Week_Now。
- */
-void TimetableGUI(uint8_t week)
+/* UTF-8 -> GB2312 后按 16x16 字体显示，返回实际像素宽度 */
+static int16_t Gui_ShowUtf8String16(int16_t x, int16_t y,
+                                    const char *utf8, int16_t max_width)
 {
-    char buf[96];
     char gbk[TIMETABLE_NAME_LEN * 2 + 1];
-    char room[TIMETABLE_CLASSROOM_LEN * 2 + 1];
-    gui_timetable_row_t rows[GUI_TIMETABLE_ROW_MAX];
-    uint8_t row_count = 0;
-    uint16_t total = 0;
-    uint8_t i;
 
-    /* 每次进入本页都先读取 NVS，保证显示网页刚刚保存的课程表 */
-    (void)Course_Load();
-    (void)Timetable_Load();
+    if (utf8 == NULL || utf8[0] == '\0') {
+        return 0;
+    }
+    if (Checklist_Utf8ToGb2312(utf8, gbk, sizeof(gbk)) == 0) {
+        return 0;
+    }
+    Gui_TruncateGb2312(gbk, max_width, 8, 16);
+    if (gbk[0] == '\0') {
+        return 0;
+    }
+    GT30L32S4W_ShowString(x, y, gbk,
+                          GT30L32S4W_FONT_ASCII_8X16,
+                          GT30L32S4W_FONT_GB2312_16X16, 0);
+    return Gui_MeasureText(gbk, GT30L32S4W_FONT_ASCII_8X16,
+                           GT30L32S4W_FONT_GB2312_16X16);
+}
 
-    if (week < TIMETABLE_WEEK_MIN || week > TIMETABLE_WEEK_MAX) {
-        week = (Semester_Week_Now >= TIMETABLE_WEEK_MIN && Semester_Week_Now <= TIMETABLE_WEEK_MAX)
-             ? Semester_Week_Now : TIMETABLE_WEEK_MIN;
+void TimetableGUI(void)
+{
+    struct tm tm_now;
+    const timetable_course_t *cur = NULL;
+    const timetable_course_t *next = NULL;
+    uint16_t cur_start = 0, cur_end = 0, next_start = 0;
+    uint8_t cur_pstart = 0, cur_pend = 0, next_pstart = 0, next_pend = 0;
+    uint16_t now_min;
+    uint8_t week, day, i, j;
+    char buf[64];
+    char info[TIMETABLE_CLASSROOM_LEN + TIMETABLE_TEACHER_LEN + 8];
+
+    if (rtc_get_time(&tm_now) != ESP_OK) {
+        memset(&tm_now, 0, sizeof(tm_now));
+    }
+
+    /* RTC: 0=周日 ... 6=周六；课程表: 1=周一 ... 7=周日 */
+    day = (tm_now.tm_wday == 0) ? 7 : (uint8_t)tm_now.tm_wday;
+    now_min = (uint16_t)(tm_now.tm_hour * 60 + tm_now.tm_min);
+    week = (Semester_Week_Now >= TIMETABLE_WEEK_MIN &&
+            Semester_Week_Now <= TIMETABLE_WEEK_MAX)
+               ? Semester_Week_Now : TIMETABLE_WEEK_MIN;
+
+    for (i = 0; i < Timetable_Count; i++) {
+        const timetable_course_t *course = &Timetable_Courses[i];
+        uint16_t start_min, end_min;
+
+        if (course->day != day || course->start_time[0] == '\0' ||
+            course->end_time[0] == '\0') {
+            continue;
+        }
+        start_min = Gui_TimeToMinutes(course->start_time);
+        end_min = Gui_TimeToMinutes(course->end_time);
+
+        for (j = 0; j < course->session_count; j++) {
+            if (course->sessions[j].week != week) {
+                continue;
+            }
+            if (now_min >= start_min && now_min < end_min) {
+                if (cur == NULL || start_min > cur_start) {
+                    cur = course;
+                    cur_start = start_min;
+                    cur_end = end_min;
+                    cur_pstart = course->sessions[j].start;
+                    cur_pend = course->sessions[j].end;
+                }
+            } else if (start_min > now_min) {
+                if (next == NULL || start_min < next_start) {
+                    next = course;
+                    next_start = start_min;
+                    next_pstart = course->sessions[j].start;
+                    next_pend = course->sessions[j].end;
+                }
+            }
+        }
     }
 
     EPD_Clear();
 
-    /* ---------- 顶部标题栏：右侧当前周次 ---------- */
-    snprintf(buf, sizeof(buf), "第%u周", (unsigned)week);
-    Gui_DrawHeader("完整课表", buf);
+    snprintf(buf, sizeof(buf), "%s %02d:%02d", Gui_WeekdayLong(tm_now.tm_wday),
+             tm_now.tm_hour, tm_now.tm_min);
+    Gui_DrawHeader("课程", buf);
+    Gui_DrawRoundRect(GUI_MARGIN, GUI_CARD_Y, GUI_W - GUI_MARGIN * 2,
+                      GUI_CARD_H, 8);
 
-    /* ---------- 收集该周的所有上课时段（按节次排序） ---------- */
-    for (i = 0; i < Timetable_Count; i++) {
-        const timetable_course_t *course = &Timetable_Courses[i];
-        uint8_t j;
+    if (cur != NULL || next != NULL) {
+        const timetable_course_t *course = (cur != NULL) ? cur : next;
+        uint8_t pstart = (cur != NULL) ? cur_pstart : next_pstart;
+        uint8_t pend = (cur != NULL) ? cur_pend : next_pend;
+        const char *status = (cur != NULL) ? "正在上课" : "下一节课";
+        int16_t status_w = Gui_MeasureText(status,
+                                           GT30L32S4W_FONT_ASCII_8X16,
+                                           GT30L32S4W_FONT_GB2312_16X16);
 
-        for (j = 0; j < course->session_count; j++) {
-            const timetable_session_t *session = &course->sessions[j];
-            gui_timetable_row_t row;
+        /* 状态徽标 */
+        Gui_FillRoundRect(8, 30, 78, 20, 10);
+        GT30L32S4W_ShowString((int16_t)(8 + (78 - status_w) / 2), 32, status,
+                              GT30L32S4W_FONT_ASCII_8X16,
+                              GT30L32S4W_FONT_GB2312_16X16, 1);
 
-            if (session->week != week) {
-                continue;
-            }
-            total++;
+        /* 节次 */
+        snprintf(buf, sizeof(buf), "第 %u-%u 节", (unsigned)pstart, (unsigned)pend);
+        GT30L32S4W_ShowString(92, 34, buf,
+                              GT30L32S4W_FONT_ASCII_6X12,
+                              GT30L32S4W_FONT_GB2312_12X12, 0);
 
-            row.start     = session->start;
-            row.end       = session->end;
-            row.name      = course->name;
-            row.classroom = course->classroom;
-            row.start_time = course->start_time;
-            row.end_time   = course->end_time;
-            Gui_TimetableRowInsert(rows, &row_count, GUI_TIMETABLE_ROW_MAX, &row);
+        /* 课程名 */
+        (void)Gui_ShowUtf8String16(10, 54, course->name,
+                                   GUI_COURSE_NAME_MAX_W);
+
+        /* 上课时间 */
+        snprintf(buf, sizeof(buf), "%s-%s", course->start_time, course->end_time);
+        GT30L32S4W_ShowString(10, 74, buf,
+                              GT30L32S4W_FONT_ASCII_12X24,
+                              GT30L32S4W_FONT_GB2312_12X12, 0);
+
+        /* 教室 / 教师 */
+        info[0] = '\0';
+        if (course->classroom[0] != '\0') {
+            strlcpy(info, course->classroom, sizeof(info));
         }
-    }
+        if (course->teacher[0] != '\0') {
+            if (info[0] != '\0') {
+                strlcat(info, " / ", sizeof(info));
+            }
+            strlcat(info, course->teacher, sizeof(info));
+        }
+        if (info[0] != '\0') {
+            (void)Gui_ShowUtf8String(10, 102, info);
+        }
 
-    /* ---------- 内容卡片 ---------- */
-    Gui_DrawRoundRect(GUI_MARGIN, GUI_CARD_Y, GUI_W - GUI_MARGIN * 2, GUI_CARD_H, 8);
-
-    if (Timetable_Count == 0) {
-        /* 还没在网页添加过课程表 */
-        const char *hint1 = "课程表为空";
-        const char *hint2 = "打开网页添加课程表";
-        int16_t w1 = Gui_MeasureText(hint1, GT30L32S4W_FONT_ASCII_8X16,
-                                     GT30L32S4W_FONT_GB2312_16X16);
-        int16_t w2 = Gui_MeasureText(hint2, GT30L32S4W_FONT_ASCII_6X12,
-                                     GT30L32S4W_FONT_GB2312_12X12);
-
-        GT30L32S4W_ShowString((int16_t)((GUI_W - w1) / 2), 62, hint1,
-                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 0);
-        GT30L32S4W_ShowString((int16_t)((GUI_W - w2) / 2), 86, hint2,
-                              GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-    } else if (row_count == 0) {
-        /* 有课程表，但这一周没有课 */
-        const char *hint = "本周没有课程";
-        int16_t w = Gui_MeasureText(hint, GT30L32S4W_FONT_ASCII_8X16,
+        /* 当前课程进度 */
+        if (cur != NULL) {
+            uint8_t percent = (uint8_t)((now_min - cur_start) * 100U /
+                                        (cur_end - cur_start));
+            Gui_DrawProgressBar(10, 116, GUI_W - 20, 6, percent);
+        }
+    } else {
+        const char *msg = (Timetable_Count == 0) ? "课程表为空" : "今天已无课程";
+        int16_t w = Gui_MeasureText(msg, GT30L32S4W_FONT_ASCII_8X16,
                                     GT30L32S4W_FONT_GB2312_16X16);
 
-        GT30L32S4W_ShowString((int16_t)((GUI_W - w) / 2), 68, hint,
-                              GT30L32S4W_FONT_ASCII_8X16, GT30L32S4W_FONT_GB2312_16X16, 0);
-        snprintf(buf, sizeof(buf), "当前共 %d 门课程", (int)Timetable_Count);
-        w = Gui_MeasureText(buf, GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12);
-        GT30L32S4W_ShowString((int16_t)((GUI_W - w) / 2), 92, buf,
-                              GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-    } else {
-        /* 每行：节次 | 课程名 | 教室（右对齐） */
-        const int16_t name_max_w =
-            (int16_t)(GUI_W - GUI_TIMETABLE_NAME_X - GUI_TIMETABLE_ROOM_W - 8);
+        GT30L32S4W_ShowString((int16_t)((GUI_W - w) / 2), 62, msg,
+                              GT30L32S4W_FONT_ASCII_8X16,
+                              GT30L32S4W_FONT_GB2312_16X16, 0);
 
-        for (i = 0; i < row_count; i++) {
-            int16_t y = (int16_t)(GUI_TIMETABLE_ROW_TOP + i * GUI_TIMETABLE_ROW_STEP);
-
-            snprintf(buf, sizeof(buf), "%u-%u",
-                     (unsigned)rows[i].start, (unsigned)rows[i].end);
-            GT30L32S4W_ShowString(GUI_TIMETABLE_PERIOD_X, y, buf,
-                                  GT30L32S4W_FONT_ASCII_6X12, GT30L32S4W_FONT_GB2312_12X12, 0);
-
-            if (rows[i].start_time != NULL && rows[i].start_time[0] != '\0' &&
-                rows[i].end_time != NULL && rows[i].end_time[0] != '\0') {
-                snprintf(buf, sizeof(buf), "%s-%s", rows[i].start_time, rows[i].end_time);
-                GT30L32S4W_ShowString(GUI_TIMETABLE_TIME_X, y, buf,
-                                      GT30L32S4W_FONT_ASCII_6X12,
-                                      GT30L32S4W_FONT_GB2312_12X12, 0);
-            }
-
-            if (Checklist_Utf8ToGb2312(rows[i].name, gbk, sizeof(gbk)) > 0) {
-                Gui_TruncateGb2312(gbk, name_max_w);
-                GT30L32S4W_ShowString(GUI_TIMETABLE_NAME_X, y, gbk,
-                                      GT30L32S4W_FONT_ASCII_6X12,
-                                      GT30L32S4W_FONT_GB2312_12X12, 0);
-            }
-
-            if (rows[i].classroom != NULL && rows[i].classroom[0] != '\0' &&
-                Checklist_Utf8ToGb2312(rows[i].classroom, room, sizeof(room)) > 0) {
-                int16_t room_w;
-
-                Gui_TruncateGb2312(room, GUI_TIMETABLE_ROOM_W);
-                room_w = Gui_Gb2312TextWidth(room);
-                GT30L32S4W_ShowString((int16_t)(GUI_W - GUI_MARGIN - 2 - room_w), y, room,
-                                      GT30L32S4W_FONT_ASCII_6X12,
-                                      GT30L32S4W_FONT_GB2312_12X12, 0);
-            }
+        if (Timetable_Count == 0) {
+            const char *hint = "打开网页添加课程表";
+            w = Gui_MeasureText(hint, GT30L32S4W_FONT_ASCII_6X12,
+                                GT30L32S4W_FONT_GB2312_12X12);
+            GT30L32S4W_ShowString((int16_t)((GUI_W - w) / 2), 88, hint,
+                                  GT30L32S4W_FONT_ASCII_6X12,
+                                  GT30L32S4W_FONT_GB2312_12X12, 0);
         }
     }
 
-    /* ---------- 底部状态栏 ---------- */
-    if (total > row_count) {
-        snprintf(buf, sizeof(buf), "共 %d 门课 本周 %u 时段 +%u",
-                 (int)Timetable_Count, (unsigned)total,
-                 (unsigned)(total - row_count));
-    } else {
-        snprintf(buf, sizeof(buf), "共 %d 门课 本周 %u 时段",
-                 (int)Timetable_Count, (unsigned)total);
-    }
+    snprintf(buf, sizeof(buf), "第 %u 周  %s", (unsigned)week,
+             Gui_WeekdayLong(tm_now.tm_wday));
     Gui_DrawFooter(buf);
-
     Gui_Flush();
 }
 

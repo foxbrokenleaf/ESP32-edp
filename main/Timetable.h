@@ -10,6 +10,7 @@
  * {
  *     "0101": {
  *         "CourseName": "高等数学",
+ *         "Day": 1,
  *         "CourseDuration": [ { "Start": 1, "End": 2 } ],
  *         "CourseSessions": [
  *             { "Week": 1, "Start": 1, "End": 2 },
@@ -25,14 +26,17 @@
  * 说明：
  *   - 根对象每个键必须是 4 位数字（课程编号，原样保存，不解释含义）；
  *   - 每门课必须包含 CourseName / CourseDuration / CourseSessions /
- *     Classroom / Teacher 五个字段，可选 StartTime / EndTime；
+ *     Classroom / Teacher 五个字段，可选 Day / StartTime / EndTime；
+ *   - Day 缺省时按 0（星期未设置）保存，旧版 JSON 仍可导入；
+ *   - 每门课只描述一个星期，同一课程多天上课请拆成多门课；
  *   - CourseDuration 可以为空数组，CourseSessions 至少 1 项；
  *   - 受固件资源限制：最多 TIMETABLE_COURSE_MAX 门课，每门最多
  *     TIMETABLE_DURATION_MAX 个 CourseDuration、TIMETABLE_SESSION_MAX 个
- *     CourseSessions；节次 1~TIMETABLE_PERIOD_MAX，周次 1~53。
+ *     CourseSessions；节次 1~TIMETABLE_PERIOD_MAX，周次 1~53，星期 1~7。
  *
- * 数据保存在 NVS 命名空间 timetable / 键 courses 中，记录头 "TMT2"。
- * 上电时如读到旧的 "TMT1" 记录会自动迁移，旧课程不会丢失。
+ * 数据保存在 NVS 命名空间 timetable / 键 courses 中，记录头 "TMT3"。
+ * 上电时如读到旧的 "TMT1" / "TMT2" 记录会自动迁移，旧课程不会丢失；
+ * 旧记录没有星期信息，Day 迁移为 0，不参与“当前/下一节”筛选。
  */
 #ifndef __TIMETABLE_H__
 #define __TIMETABLE_H__
@@ -71,6 +75,9 @@ extern "C" {
 #define TIMETABLE_PERIOD_MAX            99
 #define TIMETABLE_WEEK_MIN              1
 #define TIMETABLE_WEEK_MAX              53
+/* 星期：1=周一 ... 7=周日；0 仅用于兼容没有星期的旧记录 */
+#define TIMETABLE_DAY_MIN               1
+#define TIMETABLE_DAY_MAX               7
 
 /* ========================= 数据结构 ========================= */
 
@@ -98,9 +105,10 @@ typedef struct {
     timetable_duration_t duration[TIMETABLE_DURATION_MAX];
     uint8_t  session_count;                     /* 至少 1 项 */
     timetable_session_t sessions[TIMETABLE_SESSION_MAX];
+    uint8_t  day;                               /* 1=周一 ... 7=周日，0=未设置（旧数据） */
 } timetable_course_t;
 
-/* 定义在 Timetable.c，GUI 后续如需绘制完整课表可直接读取 */
+/* 定义在 Timetable.c，课程页按 RTC 时间从这里筛选当前 / 下一节课程 */
 extern timetable_course_t Timetable_Courses[TIMETABLE_COURSE_MAX];
 extern uint8_t            Timetable_Count;
 

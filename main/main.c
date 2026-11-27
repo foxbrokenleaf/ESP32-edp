@@ -75,7 +75,7 @@ void app_main(void)
     /* 清单（待办列表）同样保存在 NVS 里，NVS 为空时用演示默认值 */
     Checklist_Init();
 
-    /* Load the full timetable imported from the web page (empty table when NVS is blank). */
+    /* Load the course table from NVS (empty table when NVS is blank). */
     Timetable_Init();
 
     EPD_Init();
@@ -146,7 +146,7 @@ void app_main(void)
     // 网络初始化完成后启动 SNTP，首次同步成功后时间会写入 NVS
     bsp_sntp_init();
 
-    // CourseGUI();    
+    // TimetableGUI();
 
     while (1) {
         
