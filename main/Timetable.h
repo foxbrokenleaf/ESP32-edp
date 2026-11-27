@@ -6,7 +6,7 @@
  * @FilePath: \epd\main\Timetable.h
  * @Description: 完整课程表（JSON 导入）数据结构与持久化接口。
  *
- * 网页 / API 导入的 JSON 结构（与用户提供的 JSON Schema 一致）：
+ * 网页 / API 导入的 JSON 结构（兼容用户提供的 JSON Schema）：
  * {
  *     "0101": {
  *         "CourseName": "高等数学",
@@ -16,20 +16,23 @@
  *             { "Week": 2, "Start": 1, "End": 2 }
  *         ],
  *         "Classroom": "A102",
- *         "Teacher": "张老师"
+ *         "Teacher": "张老师",
+ *         "StartTime": "08:00",       // 可选，HH:MM
+ *         "EndTime": "09:40"          // 可选，HH:MM
  *     }
  * }
  *
  * 说明：
  *   - 根对象每个键必须是 4 位数字（课程编号，原样保存，不解释含义）；
- *   - 每门课必须且只能包含 CourseName / CourseDuration / CourseSessions /
- *     Classroom / Teacher 五个字段；
+ *   - 每门课必须包含 CourseName / CourseDuration / CourseSessions /
+ *     Classroom / Teacher 五个字段，可选 StartTime / EndTime；
  *   - CourseDuration 可以为空数组，CourseSessions 至少 1 项；
  *   - 受固件资源限制：最多 TIMETABLE_COURSE_MAX 门课，每门最多
  *     TIMETABLE_DURATION_MAX 个 CourseDuration、TIMETABLE_SESSION_MAX 个
  *     CourseSessions；节次 1~TIMETABLE_PERIOD_MAX，周次 1~53。
  *
- * 数据保存在 NVS 命名空间 timetable / 键 courses 中，记录头 "TMT1"。
+ * 数据保存在 NVS 命名空间 timetable / 键 courses 中，记录头 "TMT2"。
+ * 上电时如读到旧的 "TMT1" 记录会自动迁移，旧课程不会丢失。
  */
 #ifndef __TIMETABLE_H__
 #define __TIMETABLE_H__
@@ -60,6 +63,8 @@ extern "C" {
 /* 教室 / 教师：UTF-8 字节数上限，不含 '\0' */
 #define TIMETABLE_CLASSROOM_LEN         24
 #define TIMETABLE_TEACHER_LEN           24
+/* 上下课时间："HH:MM" 5 字符 + '\0'，可为空串 */
+#define TIMETABLE_TIME_LEN              5
 
 /* 节次 / 周次范围（Schema 只要求 >= 1；这里按墨水屏和存储空间限制） */
 #define TIMETABLE_PERIOD_MIN            1
@@ -87,6 +92,8 @@ typedef struct {
     char     name[TIMETABLE_NAME_LEN + 1];      /* UTF-8 */
     char     classroom[TIMETABLE_CLASSROOM_LEN + 1]; /* UTF-8，可为空串 */
     char     teacher[TIMETABLE_TEACHER_LEN + 1];     /* UTF-8，可为空串 */
+    char     start_time[TIMETABLE_TIME_LEN + 1];     /* "HH:MM"，可为空串 */
+    char     end_time[TIMETABLE_TIME_LEN + 1];       /* "HH:MM"，可为空串 */
     uint8_t  duration_count;
     timetable_duration_t duration[TIMETABLE_DURATION_MAX];
     uint8_t  session_count;                     /* 至少 1 项 */
@@ -110,6 +117,9 @@ esp_err_t Timetable_Load(void);
 
 /* 把当前内存中的课程表写入 NVS */
 esp_err_t Timetable_Save(void);
+
+/* 清空课程表并写入 NVS（网页“清空课程表”/删除最后一门课使用） */
+esp_err_t Timetable_Clear(void);
 
 /*
  * 解析网页提交的完整课程表 JSON 并应用：

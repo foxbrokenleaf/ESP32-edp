@@ -10,6 +10,7 @@
  */
 #include "Timetable.h"
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,13 +26,31 @@ static const char *TAG = "TIMETABLE";
 /* NVS 存储位置：与课节（course_store）、清单（list_store）分开 */
 #define TIMETABLE_NVS_NAMESPACE   "timetable"
 #define TIMETABLE_NVS_KEY         "courses"
-#define TIMETABLE_NVS_MAGIC       0x544D5431u   /* "TMT1"，用于识别记录版本/损坏 */
+#define TIMETABLE_NVS_MAGIC       0x544D5432u   /* "TMT2"，当前版本 */
+#define TIMETABLE_NVS_MAGIC_V1    0x544D5431u   /* "TMT1"，兼容旧版本 */
 
 /* NVS 中保存的记录头，后面紧跟 count 个 timetable_course_t */
 typedef struct {
     uint32_t magic;
     uint8_t  count;
 } timetable_nvs_header_t;
+
+/* 旧版（TMT1）课程结构：没有 StartTime / EndTime，仅用于自动迁移 */
+typedef struct {
+    uint8_t start;
+    uint8_t end;
+} timetable_duration_v1_t;
+
+typedef struct {
+    char     code[TIMETABLE_CODE_LEN];
+    char     name[TIMETABLE_NAME_LEN + 1];
+    char     classroom[TIMETABLE_CLASSROOM_LEN + 1];
+    char     teacher[TIMETABLE_TEACHER_LEN + 1];
+    uint8_t  duration_count;
+    timetable_duration_v1_t duration[TIMETABLE_DURATION_MAX];
+    uint8_t  session_count;
+    timetable_session_t sessions[TIMETABLE_SESSION_MAX];
+} timetable_course_v1_t;
 
 /* ========================= 课表全局数据 ========================= */
 
@@ -74,6 +93,44 @@ static bool timetable_code_ok(const char *code)
         }
     }
     return true;
+}
+
+/*
+ * 校验 "HH:MM" 时间文本（24 小时制）。
+ * 空串由调用者决定是否允许，本函数只接受完整格式。
+ */
+static bool timetable_time_valid(const char *time_str)
+{
+    int hour = 0;
+    int minute = 0;
+
+    if (time_str == NULL || strlen(time_str) != TIMETABLE_TIME_LEN || time_str[2] != ':') {
+        return false;
+    }
+    if (!isdigit((unsigned char)time_str[0]) || !isdigit((unsigned char)time_str[1]) ||
+        !isdigit((unsigned char)time_str[3]) || !isdigit((unsigned char)time_str[4])) {
+        return false;
+    }
+    if (sscanf(time_str, "%2d:%2d", &hour, &minute) != 2) {
+        return false;
+    }
+    return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+/* 比较两个已通过 timetable_time_valid() 的时间，结束时间必须晚于开始时间 */
+static bool timetable_time_range_valid(const char *start, const char *end)
+{
+    int start_min;
+    int end_min;
+
+    if (!timetable_time_valid(start) || !timetable_time_valid(end)) {
+        return false;
+    }
+    start_min = ((start[0] - '0') * 10 + (start[1] - '0')) * 60 +
+                (start[3] - '0') * 10 + (start[4] - '0');
+    end_min = ((end[0] - '0') * 10 + (end[1] - '0')) * 60 +
+              (end[3] - '0') * 10 + (end[4] - '0');
+    return start_min < end_min;
 }
 
 /*
@@ -190,6 +247,34 @@ static bool timetable_required_string(const cJSON *obj, const char *key, const c
     }
 
     memset(dst, 0, dst_size);
+    strlcpy(dst, item->valuestring, dst_size);
+    return true;
+}
+
+/* 取可选的 "HH:MM" 字段；不存在或空串时写入空串 */
+static bool timetable_optional_time(const cJSON *obj, const char *key, const char *code,
+                                    char *dst, size_t dst_size,
+                                    char *err, size_t err_size)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
+
+    memset(dst, 0, dst_size);
+    if (item == NULL) {
+        return true;
+    }
+    if (!cJSON_IsString(item) || item->valuestring == NULL) {
+        timetable_failf(err, err_size, ESP_ERR_INVALID_ARG,
+                        "课程 %s 的 %s 应为字符串", code, key);
+        return false;
+    }
+    if (item->valuestring[0] == '\0') {
+        return true;
+    }
+    if (!timetable_time_valid(item->valuestring)) {
+        timetable_failf(err, err_size, ESP_ERR_INVALID_ARG,
+                        "课程 %s 的 %s 格式应为 HH:MM", code, key);
+        return false;
+    }
     strlcpy(dst, item->valuestring, dst_size);
     return true;
 }
@@ -339,7 +424,8 @@ static bool timetable_parse_course(const char *code, const cJSON *obj,
                                    char *err, size_t err_size)
 {
     static const char *const allowed[] = {
-        "CourseName", "CourseDuration", "CourseSessions", "Classroom", "Teacher"
+        "CourseName", "CourseDuration", "CourseSessions", "Classroom", "Teacher",
+        "StartTime", "EndTime"
     };
     const cJSON *array;
     const cJSON *entry;
@@ -370,6 +456,24 @@ static bool timetable_parse_course(const char *code, const cJSON *obj,
                                    out->classroom, sizeof(out->classroom), err, err_size) ||
         !timetable_required_string(obj, "Teacher", code, true, TIMETABLE_TEACHER_LEN,
                                    out->teacher, sizeof(out->teacher), err, err_size)) {
+        return false;
+    }
+
+    if (!timetable_optional_time(obj, "StartTime", code, out->start_time,
+                                 sizeof(out->start_time), err, err_size) ||
+        !timetable_optional_time(obj, "EndTime", code, out->end_time,
+                                 sizeof(out->end_time), err, err_size)) {
+        return false;
+    }
+    if ((out->start_time[0] == '\0') != (out->end_time[0] == '\0')) {
+        timetable_failf(err, err_size, ESP_ERR_INVALID_ARG,
+                        "课程 %s 的 StartTime 与 EndTime 必须同时提供", code);
+        return false;
+    }
+    if (out->start_time[0] != '\0' &&
+        !timetable_time_range_valid(out->start_time, out->end_time)) {
+        timetable_failf(err, err_size, ESP_ERR_INVALID_ARG,
+                        "课程 %s 的结束时间必须晚于开始时间", code);
         return false;
     }
 
@@ -463,6 +567,8 @@ static bool timetable_blob_course_valid(const timetable_course_t *src,
     tmp.name[TIMETABLE_NAME_LEN] = '\0';
     tmp.classroom[TIMETABLE_CLASSROOM_LEN] = '\0';
     tmp.teacher[TIMETABLE_TEACHER_LEN] = '\0';
+    tmp.start_time[TIMETABLE_TIME_LEN] = '\0';
+    tmp.end_time[TIMETABLE_TIME_LEN] = '\0';
 
     if (!timetable_code_ok(tmp.code)) {
         timetable_fail(err, err_size, ESP_ERR_INVALID_STATE, "NVS 课程编号无效");
@@ -474,6 +580,14 @@ static bool timetable_blob_course_valid(const timetable_course_t *src,
                               "Classroom", err, err_size) ||
         !timetable_text_valid(tmp.teacher, TIMETABLE_TEACHER_LEN, true, tmp.code,
                               "Teacher", err, err_size)) {
+        return false;
+    }
+
+    if ((tmp.start_time[0] == '\0') != (tmp.end_time[0] == '\0') ||
+        (tmp.start_time[0] != '\0' &&
+         (!timetable_time_valid(tmp.start_time) || !timetable_time_valid(tmp.end_time) ||
+          !timetable_time_range_valid(tmp.start_time, tmp.end_time)))) {
+        timetable_fail(err, err_size, ESP_ERR_INVALID_STATE, "NVS 上下课时间无效");
         return false;
     }
 
@@ -572,6 +686,17 @@ esp_err_t Timetable_Save(void)
     return timetable_save_records(Timetable_Courses, Timetable_Count);
 }
 
+esp_err_t Timetable_Clear(void)
+{
+    esp_err_t ret = timetable_save_records(NULL, 0);
+
+    if (ret == ESP_OK) {
+        Timetable_Default();
+        ESP_LOGI(TAG, "课程表已清空并写入 NVS");
+    }
+    return ret;
+}
+
 
 esp_err_t Timetable_Load(void)
 {
@@ -580,6 +705,8 @@ esp_err_t Timetable_Load(void)
     timetable_course_t *courses = NULL;
     uint8_t *blob = NULL;
     size_t len = 0;
+    size_t course_size;
+    bool   migrated = false;
     esp_err_t ret;
 
     ret = nvs_open(TIMETABLE_NVS_NAMESPACE, NVS_READONLY, &handle);
@@ -612,9 +739,18 @@ esp_err_t Timetable_Load(void)
     }
     memcpy(&header, blob, sizeof(header));
 
-    if (header.magic != TIMETABLE_NVS_MAGIC ||
+    if (header.magic == TIMETABLE_NVS_MAGIC_V1) {
+        course_size = sizeof(timetable_course_v1_t);
+        migrated = true;
+    } else if (header.magic == TIMETABLE_NVS_MAGIC) {
+        course_size = sizeof(timetable_course_t);
+    } else {
+        course_size = 0;
+    }
+
+    if (course_size == 0 ||
         header.count > TIMETABLE_COURSE_MAX ||
-        len != sizeof(header) + (size_t)header.count * sizeof(timetable_course_t)) {
+        len != sizeof(header) + (size_t)header.count * course_size) {
         ESP_LOGW(TAG, "课程表记录无效（len=%u count=%u），忽略",
                  (unsigned)len, (unsigned)header.count);
         free(blob);
@@ -631,14 +767,40 @@ esp_err_t Timetable_Load(void)
         }
 
         for (uint8_t i = 0; i < header.count; i++) {
-            timetable_course_t raw;
+            if (migrated) {
+                timetable_course_v1_t raw;
+                timetable_course_t conv;
 
-            memcpy(&raw, payload + (size_t)i * sizeof(raw), sizeof(raw));
-            if (!timetable_blob_course_valid(&raw, &courses[i], NULL, 0)) {
-                ESP_LOGW(TAG, "课程表第 %d 门课程无效，忽略 NVS 记录", (int)i + 1);
-                free(courses);
-                free(blob);
-                return ESP_ERR_INVALID_STATE;
+                memcpy(&raw, payload + (size_t)i * sizeof(raw), sizeof(raw));
+                memset(&conv, 0, sizeof(conv));
+                memcpy(conv.code, raw.code, sizeof(conv.code));
+                memcpy(conv.name, raw.name, sizeof(conv.name));
+                memcpy(conv.classroom, raw.classroom, sizeof(conv.classroom));
+                memcpy(conv.teacher, raw.teacher, sizeof(conv.teacher));
+                conv.duration_count = raw.duration_count;
+                for (uint8_t j = 0; j < TIMETABLE_DURATION_MAX; j++) {
+                    conv.duration[j].start = raw.duration[j].start;
+                    conv.duration[j].end   = raw.duration[j].end;
+                }
+                conv.session_count = raw.session_count;
+                memcpy(conv.sessions, raw.sessions, sizeof(conv.sessions));
+
+                if (!timetable_blob_course_valid(&conv, &courses[i], NULL, 0)) {
+                    ESP_LOGW(TAG, "课程表第 %d 门课程无效，忽略 NVS 记录", (int)i + 1);
+                    free(courses);
+                    free(blob);
+                    return ESP_ERR_INVALID_STATE;
+                }
+            } else {
+                timetable_course_t raw;
+
+                memcpy(&raw, payload + (size_t)i * sizeof(raw), sizeof(raw));
+                if (!timetable_blob_course_valid(&raw, &courses[i], NULL, 0)) {
+                    ESP_LOGW(TAG, "课程表第 %d 门课程无效，忽略 NVS 记录", (int)i + 1);
+                    free(courses);
+                    free(blob);
+                    return ESP_ERR_INVALID_STATE;
+                }
             }
         }
     }
@@ -651,6 +813,15 @@ esp_err_t Timetable_Load(void)
 
     free(courses);
     free(blob);
+
+    if (migrated) {
+        ESP_LOGI(TAG, "已把旧版 TMT1 课程表迁移为 TMT2（%d 门课程）", (int)Timetable_Count);
+        ret = timetable_save_records(Timetable_Courses, Timetable_Count);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "迁移后的课程表写回 NVS 失败：%s", esp_err_to_name(ret));
+        }
+    }
+
     return ESP_OK;
 }
 
@@ -814,6 +985,12 @@ char *Timetable_ToJson(void)
         timetable_json_string(&jb, course->classroom);
         timetable_json_puts(&jb, ",\"Teacher\":");
         timetable_json_string(&jb, course->teacher);
+        if (course->start_time[0] != '\0' && course->end_time[0] != '\0') {
+            timetable_json_puts(&jb, ",\"StartTime\":");
+            timetable_json_string(&jb, course->start_time);
+            timetable_json_puts(&jb, ",\"EndTime\":");
+            timetable_json_string(&jb, course->end_time);
+        }
         timetable_json_puts(&jb, "}");
     }
     timetable_json_puts(&jb, "}");

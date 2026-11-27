@@ -6,7 +6,7 @@
  * @FilePath: \epd\main\DataStruct.h
  * @Description: 课表数据结构与持久化接口。
  *               GUI 直接读这些全局变量绘制课程表页；
- *               HTTP（网页“设置课程表”）通过 Course_ApplyJson() 更新并写入 NVS。
+ *               HTTP（网页“课程表”）通过 Course_ApplyJson() 更新学期设置并写入 NVS。
  *
  * JSON 结构（与 DataStruct.c 中的示例保持一致）：
  * {
@@ -15,7 +15,9 @@
  *     "Course_Lesson_Postion": 0,         // 0=教学楼 1=科技楼
  *     "Course_Lesson_Postion_Str": "X000",// 4 位教室编号
  *     "Course_Lesson_Time": "00:00~00:00",// 上课时间 HH:MM~HH:MM
- *     "Semester_Week_Now": 0              // 学期第几周
+ *     "Semester_Week_Now": 1,             // 当前显示学期周次
+ *     "AcademicYear": "2025-2026",        // 学年，可为空
+ *     "Semester": 1                       // 0=未设置 1=第一学期 2=第二学期
  * }
  */
 #ifndef __DATASTRUCT_H__
@@ -57,9 +59,15 @@ typedef enum {
 #define COURSE_LESSON_POSITION_STR_LEN   5
 /* 上课时间："HH:MM~HH:MM" 最长 11 字符 + '\0' */
 #define COURSE_LESSON_TIME_LEN           12
-/* 学期周次范围 */
+/* 学年："YYYY-YYYY" 9 字符 + '\0'，可为空串 */
+#define COURSE_ACADEMIC_YEAR_LEN         9
+/* 学期：0=未设置，1=第一学期，2=第二学期 */
+#define COURSE_SEMESTER_NONE             0
+#define COURSE_SEMESTER_FIRST            1
+#define COURSE_SEMESTER_SECOND           2
+/* 学期周次范围（与完整课程表保持一致） */
 #define COURSE_SEMESTER_WEEK_MIN         1
-#define COURSE_SEMESTER_WEEK_MAX         30
+#define COURSE_SEMESTER_WEEK_MAX         53
 
 /* ========================= 课表全局数据 ========================= */
 /* 定义在 DataStruct.c，GUI 直接使用，修改后调用 GuiUpdate() 重绘 */
@@ -70,6 +78,8 @@ extern course_lesson_postion_t Course_Lesson_Postion;
 extern char                    Course_Lesson_Postion_Str[COURSE_LESSON_POSITION_STR_LEN];
 extern char                    Course_Lesson_Time[COURSE_LESSON_TIME_LEN];
 extern uint8_t                 Semester_Week_Now;
+extern char                    Course_Academic_Year[COURSE_ACADEMIC_YEAR_LEN + 1];
+extern uint8_t                 Course_Semester;
 
 /* ========================= 课表接口 ========================= */
 

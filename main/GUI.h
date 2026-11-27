@@ -5,7 +5,7 @@
  * @LastEditTime: 2026-11-26 21:40:00
  * @FilePath: \epd\main\GUI.h
  * @Description: 界面（GUI）对外接口。
- *               页面在 GUI.c 里实现：0=课程表, 1=时钟, 2=日历, 3=清单，
+ *               页面在 GUI.c 里实现：0=完整课表, 1=时钟, 2=日历, 3=清单，
  *               用 layout_no 选页，改 GUI_LAYOUT_COUNT 即可增删页面。
  */
 #ifndef __GUI_H__
@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 /* 各界面在 layout_no 里的编号（网页保存后也会直接跳到对应页面） */
-#define GUI_LAYOUT_COURSE       0
+#define GUI_LAYOUT_TIMETABLE    0       /* 完整课程表（网页导入的 NVS JSON） */
 #define GUI_LAYOUT_CLOCK        1
 #define GUI_LAYOUT_CALENDAR     2
 #define GUI_LAYOUT_CHECKLIST    3
@@ -33,5 +33,8 @@ void CourseGUI(void);
 void ClockGUI(void);
 void CalendarGUI(void);
 void ListGUI(void);
+
+/* 课程表页：按 week（学期周次）筛选 NVS 中导入的课程并绘制 */
+void TimetableGUI(uint8_t week);
 
 #endif /* __GUI_H__ */
